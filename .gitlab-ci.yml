@@ -118,6 +118,7 @@ tag_release_candidate:
   variables:
     SEMVER_TOOLKIT_VERSION: "latest"
     GIT_DEPTH: 0
+    GITLAB_TOKEN: ${CICD_TOKEN}
   before_script:
     - git config --global user.email "ci@iskaypet.com"
     - git config --global user.name "GitLab CI"
