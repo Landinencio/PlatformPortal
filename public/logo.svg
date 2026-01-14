@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120">
+  <defs>
+    <style>
+      .cls-1{fill:#e06748;}
+      .cls-2{fill:#3e3e3e;}
+      .cls-3{font-family:Arial, sans-serif;font-weight:bold;font-size:80px;}
+    </style>
+  </defs>
+  <text x="10" y="85" class="cls-1 cls-3">Iskay</text>
+  <text x="210" y="85" class="cls-2 cls-3">Pet</text>
+  <circle cx="350" cy="40" r="10" class="cls-2"/>
+  <text x="343" y="45" fill="white" font-size="12" font-family="Arial">R</text>
+  <path d="M10 100 Q 200 110 390 100" stroke="#e06748" stroke-width="3" fill="none"/>
+</svg>
