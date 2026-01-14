@@ -126,5 +126,8 @@ tag_release_candidate:
   artifacts:
     reports:
       dotenv: semver-tags.env
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  only:
+    refs:
+      - main
+    variables:
+      - $CI_COMMIT_BRANCH == "main"
