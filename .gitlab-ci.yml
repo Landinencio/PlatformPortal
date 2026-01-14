@@ -99,3 +99,32 @@ sonar_scanning:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
+# Override create_ecr_repo from toolkit - repo already exists
+create_ecr_repo:
+  stage: versioning_release_candidate
+  image: alpine:3.20
+  script:
+    - echo "ECR repository n8n-portal already exists, skipping creation"
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# Override tag_release_candidate to use CI_JOB_TOKEN for this repo
+tag_release_candidate:
+  stage: versioning_release_candidate
+  image: ${REGISTRY_URL}/iskaypet/digital/tools/ci/semver-toolkit:${SEMVER_TOOLKIT_VERSION}
+  variables:
+    SEMVER_TOOLKIT_VERSION: "latest"
+    GIT_DEPTH: 0
+  before_script:
+    - git config --global user.email "ci@iskaypet.com"
+    - git config --global user.name "GitLab CI"
+    - git remote set-url origin "https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git"
+  script:
+    - /root/bin/gitlab-calculate-tags.sh
+    - source ./semver-tags.env
+    - /root/bin/gitlab-tag.sh ${GIT_RC_TAG}
+  artifacts:
+    reports:
+      dotenv: semver-tags.env
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
