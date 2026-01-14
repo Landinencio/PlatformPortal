@@ -1,12 +1,6 @@
 # Platform Portal CI/CD Pipeline
 # Includes testing, SonarQube analysis, and ECR image push
 
-
-include:
-  - project: 'iskaypetcom/sre-infra/tools/cicd/gitlab-ci-toolkit'
-    ref: main
-    file: 'CI/build.yml'
-
 default:
   tags:
     - kubernetes-executor
@@ -30,9 +24,7 @@ stages:
   - install
   - test
   - security_scan
-  - versioning_release_candidate
   - build_image
-  - versioning_release
 
 .npm-cache:
   cache:
@@ -43,7 +35,6 @@ stages:
       - node_modules/
     policy: pull-push
 
-
 install_deps:
   stage: install
   image: node:${NODE_VERSION}
@@ -53,7 +44,6 @@ install_deps:
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-
 
 lint_check:
   stage: test
@@ -67,7 +57,6 @@ lint_check:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
-
 build_check:
   stage: test
   image: node:${NODE_VERSION}
@@ -78,7 +67,6 @@ build_check:
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-
 
 sonar_scanning:
   stage: security_scan
@@ -99,39 +87,20 @@ sonar_scanning:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
-# Override create_ecr_repo from toolkit - repo already exists
-create_ecr_repo:
-  stage: versioning_release_candidate
-  image: alpine:3.20
+# Build and push Docker image using Kaniko
+build_image:
+  stage: build_image
+  image:
+    name: gcr.io/kaniko-project/executor:debug
+    entrypoint: [""]
+  needs: [build_check]
   script:
-    - echo "ECR repository n8n-portal already exists, skipping creation"
-  only:
-    refs:
-      - main
-    variables:
-      - $CI_COMMIT_BRANCH == "main"
-
-# Override tag_release_candidate to use CI_JOB_TOKEN for this repo
-tag_release_candidate:
-  stage: versioning_release_candidate
-  image: ${REGISTRY_URL}/iskaypet/digital/tools/ci/semver-toolkit:${SEMVER_TOOLKIT_VERSION}
-  variables:
-    SEMVER_TOOLKIT_VERSION: "latest"
-    GIT_DEPTH: 0
-    GITLAB_TOKEN: ${CICD_TOKEN}
-  before_script:
-    - git config --global user.email "ci@iskaypet.com"
-    - git config --global user.name "GitLab CI"
-    - git remote set-url origin "https://gitlab-ci-token:${CICD_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git"
-  script:
-    - /root/bin/gitlab-calculate-tags.sh
-    - source ./semver-tags.env
-    - /root/bin/gitlab-tag.sh ${GIT_RC_TAG}
-  artifacts:
-    reports:
-      dotenv: semver-tags.env
-  only:
-    refs:
-      - main
-    variables:
-      - $CI_COMMIT_BRANCH == "main"
+    - echo "{\"credsStore\":\"ecr-login\"}" > /kaniko/.docker/config.json
+    - |
+      /kaniko/executor \
+        --context ${CI_PROJECT_DIR} \
+        --dockerfile ${CI_PROJECT_DIR}/Dockerfile \
+        --destination ${REGISTRY_URL}/${REGISTRY_PATH}:${CI_COMMIT_SHORT_SHA} \
+        --destination ${REGISTRY_URL}/${REGISTRY_PATH}:latest
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
