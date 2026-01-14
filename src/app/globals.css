@@ -4,69 +4,74 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    /* IskayPet Dark Brown #4A3A3A (approx 0 12% 26%) */
-    --foreground: 0 12% 26%;
+    /* IskayPet Brand Colors */
+    /* Background: Cream/Beige */
+    --background: 25 40% 96%;
+    /* Foreground: Dark Brown */
+    --foreground: 15 25% 25%;
 
+    /* Cards with white background */
     --card: 0 0% 100%;
-    --card-foreground: 0 12% 26%;
+    --card-foreground: 15 25% 25%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 0 12% 26%;
+    --popover-foreground: 15 25% 25%;
 
-    /* IskayPet Terracotta #D06D5F (approx 6 58% 59%) */
-    --primary: 6 58% 59%;
+    /* Primary: IskayPet Coral/Terracotta #D5866E */
+    --primary: 15 55% 63%;
     --primary-foreground: 0 0% 100%;
 
-    /* Complimentary Brown/Grey for secondary actions */
-    --secondary: 30 10% 96%;
-    --secondary-foreground: 0 12% 26%;
+    /* Secondary: Soft beige for secondary actions */
+    --secondary: 25 30% 92%;
+    --secondary-foreground: 15 25% 25%;
 
-    --muted: 30 10% 96%;
-    --muted-foreground: 0 5% 40%;
+    --muted: 25 20% 94%;
+    --muted-foreground: 15 15% 45%;
 
-    --accent: 30 15% 94%;
-    --accent-foreground: 0 12% 26%;
+    /* Accent: Lighter coral tint */
+    --accent: 15 40% 95%;
+    --accent-foreground: 15 25% 25%;
 
-    --destructive: 0 84.2% 60.2%;
+    --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 0 5% 90%;
-    --input: 0 5% 90%;
-    --ring: 6 58% 59%;
+    --border: 25 15% 88%;
+    --input: 25 15% 88%;
+    --ring: 15 55% 63%;
 
     --radius: 0.5rem;
   }
 
   .dark {
-    /* Adapted Dark Mode */
-    --background: 0 10% 15%;
-    --foreground: 30 10% 96%;
+    /* Dark Mode - Warm dark tones */
+    --background: 15 15% 12%;
+    --foreground: 25 30% 92%;
 
-    --card: 0 10% 18%;
-    --card-foreground: 30 10% 96%;
+    --card: 15 15% 15%;
+    --card-foreground: 25 30% 92%;
 
-    --popover: 0 10% 18%;
-    --popover-foreground: 30 10% 96%;
+    --popover: 15 15% 15%;
+    --popover-foreground: 25 30% 92%;
 
-    --primary: 6 58% 65%; /* Uses lighter terracotta for visibility */
-    --primary-foreground: 0 0% 100%;
+    /* Primary: Lighter coral for visibility on dark */
+    --primary: 15 55% 68%;
+    --primary-foreground: 15 15% 12%;
 
-    --secondary: 0 10% 25%;
-    --secondary-foreground: 30 10% 96%;
+    --secondary: 15 15% 20%;
+    --secondary-foreground: 25 30% 92%;
 
-    --muted: 0 10% 25%;
-    --muted-foreground: 0 5% 65%;
+    --muted: 15 15% 20%;
+    --muted-foreground: 25 15% 60%;
 
-    --accent: 0 10% 25%;
-    --accent-foreground: 30 10% 96%;
+    --accent: 15 15% 22%;
+    --accent-foreground: 25 30% 92%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 30 10% 96%;
+    --destructive: 0 62% 35%;
+    --destructive-foreground: 25 30% 92%;
 
-    --border: 0 10% 25%;
-    --input: 0 10% 25%;
-    --ring: 6 58% 65%;
+    --border: 15 15% 22%;
+    --input: 15 15% 22%;
+    --ring: 15 55% 68%;
   }
 }
 
