@@ -105,8 +105,11 @@ create_ecr_repo:
   image: alpine:3.20
   script:
     - echo "ECR repository n8n-portal already exists, skipping creation"
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  only:
+    refs:
+      - main
+    variables:
+      - $CI_COMMIT_BRANCH == "main"
 
 # Override tag_release_candidate to use CI_JOB_TOKEN for this repo
 tag_release_candidate:
