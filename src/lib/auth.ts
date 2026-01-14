@@ -9,11 +9,14 @@ export const authOptions: NextAuthOptions = {
             tenantId: process.env.AZURE_AD_TENANT_ID || "",
         }),
     ],
-    /* 
-    pages: {
-        signIn: "/auth/signin", // Removed to use default or direct handling
-    }, 
-    */
+    // Session expires after 30 minutes (1800 seconds)
+    session: {
+        strategy: "jwt",
+        maxAge: 30 * 60, // 30 minutes
+    },
+    jwt: {
+        maxAge: 30 * 60, // 30 minutes
+    },
     callbacks: {
         async session({ session, token }) {
             // Pass the user ID or other claims to the session
