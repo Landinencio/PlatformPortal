@@ -1,0 +1,134 @@
+# Platform Portal CI/CD Pipeline
+# Includes testing, SonarQube analysis, and ECR image push
+
+# -------------------------------------------------
+# 1) Include external CI/CD templates from gitlab-ci-toolkit
+# -------------------------------------------------
+include:
+  - project: 'iskaypetcom/sre-infra/tools/cicd/gitlab-ci-toolkit'
+    ref: main
+    file: 'CI/build.yml'
+
+# -------------------------------------------------
+# 2) Global defaults
+# -------------------------------------------------
+default:
+  tags:
+    - kubernetes-executor
+
+# -------------------------------------------------
+# 3) Variables
+# -------------------------------------------------
+variables:
+  NODE_VERSION: "18-alpine"
+  AWS_REGION: "eu-west-1"
+  AWS_EC2_METADATA_DISABLED: "true"
+  AWS_SDK_LOAD_CONFIG: "true"
+  # ECR is in eks-tooling account
+  AWS_ECR_ACCOUNT_ID: "012966899965"
+  REGISTRY_URL: "${AWS_ECR_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+  # Use a simple name for the portal image
+  REGISTRY_PATH: "n8n-portal"
+  # SonarQube
+  SONAR_TOKEN: ${SQ_TOKEN}
+  SONAR_HOST_URL: "https://sonarqube.tooling.dp.iskaypet.com/"
+  SONAR_PROJECT_KEY: "platformportal"
+
+# -------------------------------------------------
+# 4) Stages
+# -------------------------------------------------
+stages:
+  - install
+  - test
+  - security_scan
+  - versioning_release_candidate
+  - build_image
+  - versioning_release
+
+# -------------------------------------------------
+# 5) Cache configuration
+# -------------------------------------------------
+.npm-cache:
+  cache:
+    key:
+      files:
+        - package-lock.json
+    paths:
+      - node_modules/
+    policy: pull-push
+
+# -------------------------------------------------
+# 6) Install dependencies
+# -------------------------------------------------
+install_deps:
+  stage: install
+  image: node:${NODE_VERSION}
+  extends: .npm-cache
+  script:
+    - npm ci
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# -------------------------------------------------
+# 7) Lint Check
+# -------------------------------------------------
+lint_check:
+  stage: test
+  image: node:${NODE_VERSION}
+  extends: .npm-cache
+  needs: [install_deps]
+  script:
+    - npm run lint
+  allow_failure: true
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# -------------------------------------------------
+# 8) Build Check (verify project compiles)
+# -------------------------------------------------
+build_check:
+  stage: test
+  image: node:${NODE_VERSION}
+  extends: .npm-cache
+  needs: [install_deps]
+  script:
+    - npm run build
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# -------------------------------------------------
+# 9) SonarQube Analysis
+# -------------------------------------------------
+sonar_scanning:
+  stage: security_scan
+  image: docker.io/sonarsource/sonar-scanner-cli:11.5
+  needs: [build_check]
+  script:
+    - |
+      sonar-scanner -X \
+        -Dsonar.qualitygate.wait=true \
+        -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+        -Dsonar.sources=src \
+        -Dsonar.exclusions=node_modules/**,**/*.test.ts,**/*.test.tsx,.next/** \
+        -Dsonar.typescript.lcov.reportPaths=coverage/lcov.info \
+        -Dsonar.cpd.exclusions=**/*.test.ts,**/*.test.tsx \
+        -Dsonar.coverage.exclusions=**/*.yaml,**/*.json,**/*.css
+  allow_failure: true
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# -------------------------------------------------
+# 10) Build & Push Docker Image (from build.yml template)
+# The build_image job is included from CI/build.yml
+# It uses Kaniko with ECR credential helper via IRSA
+# -------------------------------------------------
+# Note: The included CI/build.yml provides:
+# - tag_release_candidate: Creates RC tag
+# - create_ecr_repo: Ensures ECR repo exists
+# - build_image: Builds and pushes image with Kaniko
+# - tag_release: Manual release tagging
+# - tag_release_image: Copies RC tag to release tag

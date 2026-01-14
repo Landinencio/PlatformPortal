@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    /* IskayPet Dark Brown #4A3A3A (approx 0 12% 26%) */
+    --foreground: 0 12% 26%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 12% 26%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 12% 26%;
+
+    /* IskayPet Terracotta #D06D5F (approx 6 58% 59%) */
+    --primary: 6 58% 59%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Complimentary Brown/Grey for secondary actions */
+    --secondary: 30 10% 96%;
+    --secondary-foreground: 0 12% 26%;
+
+    --muted: 30 10% 96%;
+    --muted-foreground: 0 5% 40%;
+
+    --accent: 30 15% 94%;
+    --accent-foreground: 0 12% 26%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 0 5% 90%;
+    --input: 0 5% 90%;
+    --ring: 6 58% 59%;
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    /* Adapted Dark Mode */
+    --background: 0 10% 15%;
+    --foreground: 30 10% 96%;
+
+    --card: 0 10% 18%;
+    --card-foreground: 30 10% 96%;
+
+    --popover: 0 10% 18%;
+    --popover-foreground: 30 10% 96%;
+
+    --primary: 6 58% 65%; /* Uses lighter terracotta for visibility */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 0 10% 25%;
+    --secondary-foreground: 30 10% 96%;
+
+    --muted: 0 10% 25%;
+    --muted-foreground: 0 5% 65%;
+
+    --accent: 0 10% 25%;
+    --accent-foreground: 30 10% 96%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 30 10% 96%;
+
+    --border: 0 10% 25%;
+    --input: 0 10% 25%;
+    --ring: 6 58% 65%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
