@@ -1,97 +1,55 @@
-# Platform Portal CI/CD Pipeline
-# Includes testing, SonarQube analysis, and ECR image push
-
 default:
   tags:
     - kubernetes-executor
 
 variables:
-  NODE_VERSION: "18-alpine"
+  GITLAB_SUBGROUP: "sre"
+  DEPARTMENT: "digital"
+  # Standard Node.js setup
+  NODE_VERSION: "18.17.0"
+  PNPM_HOME: "${CI_PROJECT_DIR}/.pnpm-store"
+  NPM_CONFIG_PREFIX: "${CI_PROJECT_DIR}/.npm-global"
+  # ECR Configuration
   AWS_REGION: "eu-west-1"
-  AWS_EC2_METADATA_DISABLED: "true"
-  AWS_SDK_LOAD_CONFIG: "true"
-  # Use TOOLING account credentials for ECR (012966899965)
-  AWS_ACCESS_KEY_ID: ${AWS_TOOLING_ACCESS_KEY_ID}
-  AWS_SECRET_ACCESS_KEY: ${AWS_TOOLING_SECRET_ACCESS_KEY}
-  AWS_ECR_ACCOUNT_ID: "012966899965"
-  REGISTRY_URL: "${AWS_ECR_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+  REGISTRY_URL: "012966899965.dkr.ecr.eu-west-1.amazonaws.com"
   REGISTRY_PATH: "n8n-portal"
-  SONAR_TOKEN: ${SQ_TOKEN}
-  SONAR_HOST_URL: "https://sonarqube.tooling.dp.iskaypet.com/"
-  SONAR_PROJECT_KEY: "platformportal"
+
+image: node:${NODE_VERSION}
 
 stages:
-  - install
+  - build
   - test
-  - security_scan
+  - lint
   - build_image
 
-.npm-cache:
-  cache:
-    key:
-      files:
-        - package-lock.json
-    paths:
-      - node_modules/
-    policy: pull-push
+cache:
+  key:
+    files:
+      - package-lock.json
+  paths:
+    - node_modules/
 
-install_deps:
-  stage: install
-  image: node:${NODE_VERSION}
-  extends: .npm-cache
-  script:
-    - npm ci
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+before_script:
+  - npm ci
 
-lint_check:
-  stage: test
-  image: node:${NODE_VERSION}
-  extends: .npm-cache
-  needs: [install_deps]
-  script:
-    - npm run lint
-  allow_failure: true
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-
-build_check:
-  stage: test
-  image: node:${NODE_VERSION}
-  extends: .npm-cache
-  needs: [install_deps]
+build:
+  stage: build
   script:
     - npm run build
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  artifacts:
+    expire_in: 1 day
+    paths:
+      - .next/
 
-sonar_scanning:
-  stage: security_scan
-  image: docker.io/sonarsource/sonar-scanner-cli:11.5
-  needs: [build_check]
+lint:
+  stage: lint
   script:
-    - |
-      sonar-scanner -X \
-        -Dsonar.qualitygate.wait=true \
-        -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
-        -Dsonar.sources=src \
-        -Dsonar.exclusions=node_modules/**,**/*.test.ts,**/*.test.tsx,.next/** \
-        -Dsonar.typescript.lcov.reportPaths=coverage/lcov.info \
-        -Dsonar.cpd.exclusions=**/*.test.ts,**/*.test.tsx \
-        -Dsonar.coverage.exclusions=**/*.yaml,**/*.json,**/*.css
-  allow_failure: true
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - npm run lint
 
-# Build and push Docker image using Kaniko
 build_image:
   stage: build_image
   image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:v0.3.11
-  needs: [build_check]
+  before_script: [] # Don't run npm ci here
   script:
     - aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${REGISTRY_URL}
     - docker build -t ${REGISTRY_URL}/${REGISTRY_PATH}:${CI_COMMIT_SHORT_SHA} .

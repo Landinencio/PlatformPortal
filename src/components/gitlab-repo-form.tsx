@@ -126,6 +126,7 @@ export function GitLabRepoForm() {
                                 <SelectContent>
                                     <SelectItem value="go-microservices">Go Microservices</SelectItem>
                                     <SelectItem value="frontend-headless">Frontend Headless</SelectItem>
+                                    <SelectItem value="headless-template-multi-brand">Headless Template Multi-Brand</SelectItem>
                                     <SelectItem value="springboot-microservices">Springboot Microservices</SelectItem>
                                     <SelectItem value="fastapi-microservices">FastAPI Microservices</SelectItem>
                                     <SelectItem value="springboot-library">Springboot Library</SelectItem>
