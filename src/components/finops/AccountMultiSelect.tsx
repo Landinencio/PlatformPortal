@@ -10,6 +10,7 @@ import {
     CommandGroup,
     CommandInput,
     CommandItem,
+    CommandList,
 } from "@/components/ui/command";
 import {
     Popover,
@@ -93,46 +94,48 @@ export function AccountMultiSelect({
             <PopoverContent className="w-[400px] p-0" align="start">
                 <Command>
                     <CommandInput placeholder="Search accounts..." />
-                    <CommandEmpty>No account found.</CommandEmpty>
-                    <CommandGroup className="max-h-64 overflow-auto">
-                        <CommandItem
-                            onSelect={toggleAll}
-                            className="font-semibold border-b"
-                        >
-                            <div
-                                className={cn(
-                                    "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
-                                    selectedIds.length === accounts.length
-                                        ? "bg-primary text-primary-foreground"
-                                        : "opacity-50 [&_svg]:invisible"
-                                )}
-                            >
-                                <Check className="h-4 w-4" />
-                            </div>
-                            Select All ({accounts.length})
-                        </CommandItem>
-                        {accounts.map((account) => (
+                    <CommandList>
+                        <CommandEmpty>No account found.</CommandEmpty>
+                        <CommandGroup className="max-h-64 overflow-auto">
                             <CommandItem
-                                key={account.id}
-                                onSelect={() => toggleAccount(account.id)}
+                                onSelect={toggleAll}
+                                className="font-semibold border-b"
                             >
                                 <div
                                     className={cn(
                                         "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
-                                        selectedIds.includes(account.id)
+                                        selectedIds.length === accounts.length
                                             ? "bg-primary text-primary-foreground"
                                             : "opacity-50 [&_svg]:invisible"
                                     )}
                                 >
                                     <Check className="h-4 w-4" />
                                 </div>
-                                <span>{account.name}</span>
-                                <span className="ml-auto text-xs text-muted-foreground">
-                                    {account.id.slice(-6)}
-                                </span>
+                                Select All ({accounts.length})
                             </CommandItem>
-                        ))}
-                    </CommandGroup>
+                            {accounts.map((account) => (
+                                <CommandItem
+                                    key={account.id}
+                                    onSelect={() => toggleAccount(account.id)}
+                                >
+                                    <div
+                                        className={cn(
+                                            "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
+                                            selectedIds.includes(account.id)
+                                                ? "bg-primary text-primary-foreground"
+                                                : "opacity-50 [&_svg]:invisible"
+                                        )}
+                                    >
+                                        <Check className="h-4 w-4" />
+                                    </div>
+                                    <span>{account.name}</span>
+                                    <span className="ml-auto text-xs text-muted-foreground">
+                                        {account.id.slice(-6)}
+                                    </span>
+                                </CommandItem>
+                            ))}
+                        </CommandGroup>
+                    </CommandList>
                 </Command>
             </PopoverContent>
         </Popover>
