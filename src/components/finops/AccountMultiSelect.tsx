@@ -1,23 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { Check, ChevronsUpDown } from "lucide-react";
+import { ChevronsUpDown, Search, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import {
-    Command,
-    CommandEmpty,
-    CommandGroup,
-    CommandInput,
-    CommandItem,
-    CommandList,
-} from "@/components/ui/command";
 import {
     Popover,
     PopoverContent,
     PopoverTrigger,
 } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 
 interface Account {
     id: string;
@@ -38,6 +32,7 @@ export function AccountMultiSelect({
     placeholder = "Select accounts..."
 }: AccountMultiSelectProps) {
     const [open, setOpen] = useState(false);
+    const [searchTerm, setSearchTerm] = useState("");
 
     const toggleAccount = (accountId: string) => {
         if (selectedIds.includes(accountId)) {
@@ -57,6 +52,12 @@ export function AccountMultiSelect({
 
     const selectedAccounts = accounts.filter(a => selectedIds.includes(a.id));
 
+    // Filter logic
+    const filteredAccounts = accounts.filter(account =>
+        account.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        account.id.includes(searchTerm)
+    );
+
     return (
         <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
@@ -66,7 +67,7 @@ export function AccountMultiSelect({
                     aria-expanded={open}
                     className="w-full justify-between h-auto min-h-[2.5rem] py-2"
                 >
-                    <div className="flex flex-wrap gap-1 flex-1">
+                    <div className="flex flex-wrap gap-1 flex-1 text-left">
                         {selectedIds.length === 0 ? (
                             <span className="text-muted-foreground">{placeholder}</span>
                         ) : selectedIds.length === accounts.length ? (
@@ -92,53 +93,77 @@ export function AccountMultiSelect({
                 </Button>
             </PopoverTrigger>
             <PopoverContent className="w-[400px] p-0" align="start">
-                <Command>
-                    <CommandInput placeholder="Search accounts..." />
-                    <CommandList>
-                        <CommandEmpty>No account found.</CommandEmpty>
-                        <CommandGroup className="max-h-64 overflow-auto">
-                            <CommandItem
-                                onSelect={toggleAll}
-                                className="font-semibold border-b"
-                                value="Select All"
-                            >
+                <div className="flex flex-col max-h-[400px]">
+                    {/* Search Input */}
+                    <div className="flex items-center border-b px-3">
+                        <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+                        <Input
+                            placeholder="Search accounts..."
+                            className="flex h-11 w-full rounded-md border-none bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-50"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
+
+                    {/* List */}
+                    <div className="overflow-y-auto overflow-x-hidden p-1">
+                        {filteredAccounts.length === 0 ? (
+                            <div className="py-6 text-center text-sm text-muted-foreground">
+                                No account found.
+                            </div>
+                        ) : (
+                            <div className="space-y-1">
+                                {/* Select All Action */}
                                 <div
                                     className={cn(
-                                        "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
-                                        selectedIds.length === accounts.length
-                                            ? "bg-primary text-primary-foreground"
-                                            : "opacity-50 [&_svg]:invisible"
+                                        "relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground cursor-pointer transition-colors",
+                                        selectedIds.length === accounts.length && "bg-accent/50"
                                     )}
-                                >
-                                    <Check className="h-4 w-4" />
-                                </div>
-                                Select All ({accounts.length})
-                            </CommandItem>
-                            {accounts.map((account) => (
-                                <CommandItem
-                                    key={account.id}
-                                    onSelect={() => toggleAccount(account.id)}
-                                    value={`${account.name} ${account.id}`}
+                                    onClick={toggleAll}
                                 >
                                     <div
                                         className={cn(
                                             "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
-                                            selectedIds.includes(account.id)
+                                            selectedIds.length === accounts.length
                                                 ? "bg-primary text-primary-foreground"
                                                 : "opacity-50 [&_svg]:invisible"
                                         )}
                                     >
                                         <Check className="h-4 w-4" />
                                     </div>
-                                    <span>{account.name}</span>
-                                    <span className="ml-auto text-xs text-muted-foreground">
-                                        {account.id.slice(-6)}
-                                    </span>
-                                </CommandItem>
-                            ))}
-                        </CommandGroup>
-                    </CommandList>
-                </Command>
+                                    <span className="font-semibold">Select All ({accounts.length})</span>
+                                </div>
+
+                                {/* Items */}
+                                {filteredAccounts.map((account) => (
+                                    <div
+                                        key={account.id}
+                                        className={cn(
+                                            "relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground cursor-pointer transition-colors",
+                                            selectedIds.includes(account.id) && "bg-accent/50"
+                                        )}
+                                        onClick={() => toggleAccount(account.id)}
+                                    >
+                                        <div
+                                            className={cn(
+                                                "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
+                                                selectedIds.includes(account.id)
+                                                    ? "bg-primary text-primary-foreground"
+                                                    : "opacity-50 [&_svg]:invisible"
+                                            )}
+                                        >
+                                            <Check className="h-4 w-4" />
+                                        </div>
+                                        <span className="flex-1 truncate">{account.name}</span>
+                                        <span className="ml-2 text-xs text-muted-foreground tabular-nums">
+                                            {account.id.slice(-6)}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
             </PopoverContent>
         </Popover>
     );
