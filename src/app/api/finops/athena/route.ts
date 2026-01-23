@@ -1,65 +1,55 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from "next/server";
 
-export async function GET(request: Request) {
+const LAMBDA_URL = "https://jzcrsycqa2plblvxdeck37r6am0kxeqw.lambda-url.eu-north-1.on.aws/";
+
+export async function GET(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
-        const accountIds = searchParams.get('accountIds') || 'all';
-        const startDate = searchParams.get('startDate');
-        const endDate = searchParams.get('endDate');
-        const includeTrends = searchParams.get('includeTrends') !== 'false';
+        const accountIds = searchParams.get("accountIds") || "all";
+        const startDate = searchParams.get("startDate");
+        const endDate = searchParams.get("endDate");
+        const includeTrends = searchParams.get("includeTrends") !== "false";
 
-        console.log(`[FinOps Athena API] Request received. Accounts: ${accountIds}, Start: ${startDate}, End: ${endDate}, Trends: ${includeTrends}`);
-
-        // Validate required parameters
         if (!startDate || !endDate) {
             return NextResponse.json(
-                { error: 'startDate and endDate are required' },
+                { error: "startDate and endDate are required" },
                 { status: 400 }
             );
         }
 
-        const webhookUrl = process.env.N8N_FINOPS_ATHENA_WEBHOOK;
-
-        if (!webhookUrl) {
-            console.error('[FinOps Athena API] Critical: N8N_FINOPS_ATHENA_WEBHOOK env var is missing');
-            return NextResponse.json(
-                { error: 'Server configuration error: Athena webhook URL missing' },
-                { status: 500 }
-            );
-        }
-
-        const n8nUrl = new URL(webhookUrl);
-        n8nUrl.searchParams.append('accountIds', accountIds);
-        n8nUrl.searchParams.append('startDate', startDate);
-        n8nUrl.searchParams.append('endDate', endDate);
-        n8nUrl.searchParams.append('includeTrends', String(includeTrends));
-
-        console.log(`[FinOps Athena API] Proxying to n8n: ${n8nUrl.toString()}`);
-
-        const res = await fetch(n8nUrl.toString(), {
-            method: 'GET',
+        // Call Lambda
+        const lambdaResponse = await fetch(LAMBDA_URL, {
+            method: "POST",
             headers: {
-                'Content-Type': 'application/json',
+                "Content-Type": "application/json",
             },
-            cache: 'no-store'
+            body: JSON.stringify({
+                query: {
+                    accountIds,
+                    startDate,
+                    endDate,
+                    includeTrends,
+                },
+            }),
         });
 
-        if (!res.ok) {
-            const text = await res.text();
-            console.error(`[FinOps Athena API] n8n Fetch Failed. Status: ${res.status} ${res.statusText}. Body: ${text}`);
-            return NextResponse.json(
-                { error: `Downstream Error: ${res.statusText}`, details: text },
-                { status: res.status }
-            );
+        if (!lambdaResponse.ok) {
+            throw new Error(`Lambda returned ${lambdaResponse.status}`);
         }
 
-        const data = await res.json();
-        return NextResponse.json(data);
+        const data = await lambdaResponse.json();
 
+        // Lambda returns {statusCode, body}, we need to parse body
+        if (data.body) {
+            const parsedBody = typeof data.body === 'string' ? JSON.parse(data.body) : data.body;
+            return NextResponse.json(parsedBody);
+        }
+
+        return NextResponse.json(data);
     } catch (error) {
-        console.error('[FinOps Athena API] Unhandled Exception:', error);
+        console.error("Error calling Lambda:", error);
         return NextResponse.json(
-            { error: 'Internal Server Error', details: String(error) },
+            { error: "Failed to fetch data from Lambda" },
             { status: 500 }
         );
     }
