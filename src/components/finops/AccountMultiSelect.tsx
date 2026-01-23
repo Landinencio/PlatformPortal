@@ -100,6 +100,7 @@ export function AccountMultiSelect({
                             <CommandItem
                                 onSelect={toggleAll}
                                 className="font-semibold border-b"
+                                value="Select All"
                             >
                                 <div
                                     className={cn(
@@ -117,6 +118,7 @@ export function AccountMultiSelect({
                                 <CommandItem
                                     key={account.id}
                                     onSelect={() => toggleAccount(account.id)}
+                                    value={`${account.name} ${account.id}`}
                                 >
                                     <div
                                         className={cn(
