@@ -41,10 +41,10 @@ export default function Home() {
       active: true,
     },
     {
-      title: "FinOps Cost Explorer",
-      description: "Analyze AWS cloud spend efficiency globally or per account.",
+      title: "FinOps Analytics",
+      description: "Analyze AWS cloud spend efficiency globally or per account using Athena & CUR.",
       icon: DollarSign,
-      href: "/finops",
+      href: "/finops-athena",
       active: true,
     },
   ]
