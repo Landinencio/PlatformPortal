@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, DollarSign, TrendingUp, TrendingDown, Building2, Calendar, Home, Database } from "lucide-react";
+import { Loader2, DollarSign, TrendingUp, TrendingDown, Building2, Calendar, Home, Database, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -72,6 +72,11 @@ export function FinOpsAthenaDashboard() {
     const [filterMode, setFilterMode] = useState<'all' | 'increases' | 'decreases'>('all');
     const [chartView, setChartView] = useState<'service' | 'account'>('service');
 
+    // AI analysis state
+    const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
+    const [aiLoading, setAiLoading] = useState(false);
+    const [showAiAnalysis, setShowAiAnalysis] = useState(false);
+
     const fetchData = async () => {
         if (selectedAccountIds.length === 0) {
             setError("Please select at least one account.");
@@ -98,6 +103,31 @@ export function FinOpsAthenaDashboard() {
             console.error(err);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchAiAnalysis = async () => {
+        if (!data) return;
+
+        setAiLoading(true);
+        try {
+            const res = await fetch("/api/ai/analyze-costs", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(data),
+            });
+
+            if (!res.ok) throw new Error("Failed to get AI analysis");
+
+            const result = await res.json();
+            setAiAnalysis(result.analysis);
+            setShowAiAnalysis(true);
+        } catch (err) {
+            console.error("AI Analysis error:", err);
+            setAiAnalysis("Error al obtener análisis de IA. Por favor intenta de nuevo.");
+            setShowAiAnalysis(true);
+        } finally {
+            setAiLoading(false);
         }
     };
 
@@ -342,6 +372,62 @@ export function FinOpsAthenaDashboard() {
                             </CardContent>
                         </Card>
                     </div>
+
+                    {/* AI Analysis Section */}
+                    <Card className="border-none shadow-lg bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-950/20 dark:to-blue-950/20">
+                        <CardHeader>
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <Sparkles className="h-5 w-5 text-purple-600" />
+                                    <CardTitle>AI Cost Analysis</CardTitle>
+                                </div>
+                                {!showAiAnalysis && (
+                                    <Button
+                                        onClick={fetchAiAnalysis}
+                                        disabled={aiLoading}
+                                        className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+                                    >
+                                        {aiLoading ? (
+                                            <>
+                                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                                Analyzing...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Sparkles className="h-4 w-4 mr-2" />
+                                                Get AI Insights
+                                            </>
+                                        )}
+                                    </Button>
+                                )}
+                            </div>
+                            <CardDescription>
+                                Análisis inteligente de tus costos AWS powered by DeepSeek
+                            </CardDescription>
+                        </CardHeader>
+                        {showAiAnalysis && aiAnalysis && (
+                            <CardContent>
+                                <div className="prose prose-sm max-w-none bg-white dark:bg-zinc-900 rounded-lg p-4 border">
+                                    <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                                        {aiAnalysis}
+                                    </div>
+                                    <div className="mt-4 pt-3 border-t text-xs text-muted-foreground flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <Sparkles className="h-3 w-3" />
+                                            Generado por DeepSeek R1
+                                        </div>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => setShowAiAnalysis(false)}
+                                        >
+                                            Close
+                                        </Button>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        )}
+                    </Card>
 
                     {/* Quick Filters */}
                     <QuickFilters
