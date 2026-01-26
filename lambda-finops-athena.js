@@ -186,14 +186,20 @@ ORDER BY sp_covered_cost DESC;
             topMovers: { increases: serviceChanges.filter(s => s.change > 0).slice(0, 5), decreases: serviceChanges.filter(s => s.change < 0).slice(0, 5) },
             savingsPlans: {
                 totalCoverage: parseFloat(savingsPlansResults.reduce((sum, r) => sum + r.sp_covered_cost, 0).toFixed(2)),
-                byAccount: savingsPlansResults.map(r => ({
-                    accountId: r.account_id,
-                    accountName: accountNames[r.account_id] || r.account_id,
-                    spCoveredCost: parseFloat(r.sp_covered_cost.toFixed(2)),
-                    totalCost: parseFloat(r.total_cost.toFixed(2)),
-                    coveragePercentage: r.total_cost > 0 ? parseFloat(((r.sp_covered_cost / r.total_cost) * 100).toFixed(2)) : 0,
-                    lineItems: r.line_items
-                }))
+                byAccount: savingsPlansResults.map(r => {
+                    // Find the matching account from main query to get real total cost
+                    const accountData = accounts.find(acc => acc.accountId === r.account_id);
+                    const realTotalCost = accountData ? accountData.totalCost : r.total_cost;
+
+                    return {
+                        accountId: r.account_id,
+                        accountName: accountNames[r.account_id] || r.account_id,
+                        spCoveredCost: parseFloat(r.sp_covered_cost.toFixed(2)),
+                        totalCost: realTotalCost,
+                        coveragePercentage: realTotalCost > 0 ? parseFloat(((r.sp_covered_cost / realTotalCost) * 100).toFixed(2)) : 0,
+                        lineItems: r.line_items
+                    };
+                })
             }
         };
 
