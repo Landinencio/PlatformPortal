@@ -60,8 +60,8 @@ export function FinOpsDashboard() {
     // STABLE ACCOUNT LIST (Hardcoded to ensure Dropdown is always available)
     const accountsList = [
         // EKS
-        { id: "933315498976", name: "EKS Dev / Default" },
-        { id: "656056379995", name: "EKS UAT" },
+        { id: "111122223333", name: "EKS Dev / Default" },
+        { id: "222233334444", name: "EKS UAT" },
         { id: "000339436598", name: "EKS Prod" },
         { id: "012966899965", name: "EKS Tooling" },
         // Helios
