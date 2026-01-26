@@ -1,6 +1,8 @@
 import { AthenaClient, StartQueryExecutionCommand, GetQueryExecutionCommand, GetQueryResultsCommand } from '@aws-sdk/client-athena';
+import { SavingsPlansClient, DescribeSavingsPlansCommand } from '@aws-sdk/client-savingsplans';
 
-const client = new AthenaClient({ region: 'eu-west-1' });
+const athenaClient = new AthenaClient({ region: 'eu-west-1' });
+const savingsPlansClient = new SavingsPlansClient({ region: 'us-east-1' }); // Savings Plans API is in us-east-1
 
 export const handler = async (event) => {
     try {
@@ -107,6 +109,9 @@ ORDER BY sp_covered_cost DESC;
         const previousResults = includeTrends ? await executeAthenaQuery(previousQuery) : [];
         const savingsPlansResults = await executeSavingsPlansQuery(savingsPlansQuery);
 
+        // Get Savings Plans commitment info
+        const savingsPlansCommitment = await getSavingsPlansCommitment();
+
         // Account name mapping
         const accountNames = {
             '933315498976': 'EKS Dev / Default', '656056379995': 'EKS UAT', '000339436598': 'EKS Prod',
@@ -186,6 +191,7 @@ ORDER BY sp_covered_cost DESC;
             topMovers: { increases: serviceChanges.filter(s => s.change > 0).slice(0, 5), decreases: serviceChanges.filter(s => s.change < 0).slice(0, 5) },
             savingsPlans: {
                 totalCoverage: parseFloat(savingsPlansResults.reduce((sum, r) => sum + r.sp_covered_cost, 0).toFixed(2)),
+                commitment: savingsPlansCommitment,
                 byAccount: savingsPlansResults.map(r => {
                     // Find the matching account from main query to get real total cost
                     const accountData = accounts.find(acc => acc.accountId === r.account_id);
@@ -229,7 +235,7 @@ async function executeAthenaQuery(queryString) {
         ResultConfiguration: { OutputLocation: 's3://finnops-iskaypet/athena-query-results/' }
     });
 
-    const startResult = await client.send(startCommand);
+    const startResult = await athenaClient.send(startCommand);
     const queryId = startResult.QueryExecutionId;
 
     let status = 'RUNNING';
@@ -240,7 +246,7 @@ async function executeAthenaQuery(queryString) {
         await new Promise(resolve => setTimeout(resolve, 2000));
 
         const statusCommand = new GetQueryExecutionCommand({ QueryExecutionId: queryId });
-        const statusResult = await client.send(statusCommand);
+        const statusResult = await athenaClient.send(statusCommand);
         status = statusResult.QueryExecution.Status.State;
         attempts++;
 
@@ -254,7 +260,7 @@ async function executeAthenaQuery(queryString) {
     }
 
     const resultsCommand = new GetQueryResultsCommand({ QueryExecutionId: queryId });
-    const resultsResult = await client.send(resultsCommand);
+    const resultsResult = await athenaClient.send(resultsCommand);
     const rows = resultsResult.ResultSet.Rows || [];
 
     if (rows.length <= 1) return [];
@@ -273,7 +279,7 @@ async function executeSavingsPlansQuery(queryString) {
         ResultConfiguration: { OutputLocation: 's3://finnops-iskaypet/athena-query-results/' }
     });
 
-    const startResult = await client.send(startCommand);
+    const startResult = await athenaClient.send(startCommand);
     const queryId = startResult.QueryExecutionId;
 
     let status = 'RUNNING';
@@ -284,7 +290,7 @@ async function executeSavingsPlansQuery(queryString) {
         await new Promise(resolve => setTimeout(resolve, 2000));
 
         const statusCommand = new GetQueryExecutionCommand({ QueryExecutionId: queryId });
-        const statusResult = await client.send(statusCommand);
+        const statusResult = await athenaClient.send(statusCommand);
         status = statusResult.QueryExecution.Status.State;
         attempts++;
 
@@ -298,7 +304,7 @@ async function executeSavingsPlansQuery(queryString) {
     }
 
     const resultsCommand = new GetQueryResultsCommand({ QueryExecutionId: queryId });
-    const resultsResult = await client.send(resultsCommand);
+    const resultsResult = await athenaClient.send(resultsCommand);
     const rows = resultsResult.ResultSet.Rows || [];
 
     if (rows.length <= 1) return [];
@@ -309,4 +315,42 @@ async function executeSavingsPlansQuery(queryString) {
         total_cost: parseFloat(row.Data[2]?.VarCharValue || '0'),
         line_items: parseInt(row.Data[3]?.VarCharValue || '0', 10)
     }));
+}
+
+async function getSavingsPlansCommitment() {
+    try {
+        const command = new DescribeSavingsPlansCommand({
+            savingsPlanIds: ['dae0756e-c1b1-465a-a5a0-c48a1927ddb5']
+        });
+
+        const response = await savingsPlansClient.send(command);
+
+        if (!response.savingsPlans || response.savingsPlans.length === 0) {
+            return null;
+        }
+
+        const sp = response.savingsPlans[0];
+
+        // Calculate monthly commitment based on hourly commitment
+        const hourlyCommitment = parseFloat(sp.commitment || 0);
+        const hoursInMonth = 730; // Average hours in a month
+        const monthlyCommitment = hourlyCommitment * hoursInMonth;
+
+        return {
+            savingsPlanId: sp.savingsPlanId,
+            savingsPlanArn: sp.savingsPlanArn,
+            hourlyCommitment: parseFloat(hourlyCommitment.toFixed(4)),
+            monthlyCommitment: parseFloat(monthlyCommitment.toFixed(2)),
+            paymentOption: sp.paymentOption,
+            savingsPlanType: sp.savingsPlanType,
+            startTime: sp.start,
+            endTime: sp.end,
+            state: sp.state,
+            recurringPayment: parseFloat(sp.recurringPaymentAmount || 0),
+            upfrontPayment: parseFloat(sp.upfrontPaymentAmount || 0)
+        };
+    } catch (error) {
+        console.error('Error fetching Savings Plans commitment:', error);
+        return null;
+    }
 }
