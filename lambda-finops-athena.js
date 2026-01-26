@@ -90,11 +90,12 @@ WHERE line_item_usage_start_date >= DATE '${prevStartDate}'
 GROUP BY 1,2;
 ` : null;
 
-        // Savings Plans query
+        // Savings Plans query - Enhanced with savings calculation
         const savingsPlansQuery = `
 SELECT 
   line_item_usage_account_id as account_id,
   SUM(savings_plan_savings_plan_effective_cost) as sp_covered_cost,
+  SUM(pricing_public_on_demand_cost) as on_demand_cost,
   SUM(line_item_unblended_cost) as total_cost,
   COUNT(*) as line_items
 FROM athenacurcfn_finnops.data
@@ -193,16 +194,21 @@ ORDER BY sp_covered_cost DESC;
             topMovers: { increases: serviceChanges.filter(s => s.change > 0).slice(0, 5), decreases: serviceChanges.filter(s => s.change < 0).slice(0, 5) },
             savingsPlans: {
                 totalCoverage: parseFloat(savingsPlansResults.reduce((sum, r) => sum + r.sp_covered_cost, 0).toFixed(2)),
+                totalSavings: parseFloat(savingsPlansResults.reduce((sum, r) => sum + (r.on_demand_cost - r.sp_covered_cost), 0).toFixed(2)),
                 commitment: savingsPlansCommitment,
                 byAccount: savingsPlansResults.map(r => {
                     // Find the matching account from main query to get real total cost
                     const accountData = accounts.find(acc => acc.accountId === r.account_id);
                     const realTotalCost = accountData ? accountData.totalCost : r.total_cost;
+                    const savings = r.on_demand_cost - r.sp_covered_cost;
 
                     return {
                         accountId: r.account_id,
                         accountName: accountNames[r.account_id] || r.account_id,
                         spCoveredCost: parseFloat(r.sp_covered_cost.toFixed(2)),
+                        onDemandCost: parseFloat(r.on_demand_cost.toFixed(2)),
+                        savings: parseFloat(savings.toFixed(2)),
+                        savingsPercentage: r.on_demand_cost > 0 ? parseFloat(((savings / r.on_demand_cost) * 100).toFixed(2)) : 0,
                         totalCost: realTotalCost,
                         coveragePercentage: realTotalCost > 0 ? parseFloat(((r.sp_covered_cost / realTotalCost) * 100).toFixed(2)) : 0,
                         lineItems: r.line_items
@@ -314,8 +320,9 @@ async function executeSavingsPlansQuery(queryString) {
     return rows.slice(1).map(row => ({
         account_id: row.Data[0]?.VarCharValue || '',
         sp_covered_cost: parseFloat(row.Data[1]?.VarCharValue || '0'),
-        total_cost: parseFloat(row.Data[2]?.VarCharValue || '0'),
-        line_items: parseInt(row.Data[3]?.VarCharValue || '0', 10)
+        on_demand_cost: parseFloat(row.Data[2]?.VarCharValue || '0'),
+        total_cost: parseFloat(row.Data[3]?.VarCharValue || '0'),
+        line_items: parseInt(row.Data[4]?.VarCharValue || '0', 10)
     }));
 }
 
