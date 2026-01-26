@@ -34,6 +34,9 @@ export interface SavingsPlanAccount {
   accountId: string;
   accountName: string;
   spCoveredCost: number;
+  onDemandCost: number;
+  savings: number;
+  savingsPercentage: number;
   totalCost: number;
   coveragePercentage: number;
   lineItems: number;
@@ -41,7 +44,9 @@ export interface SavingsPlanAccount {
 
 export interface SavingsPlansData {
   totalCoverage: number;
+  totalSavings: number;
   byAccount: SavingsPlanAccount[];
+  commitment?: any; // Optional commitment data
 }
 
 export interface AthenaFinOpsResponse {
