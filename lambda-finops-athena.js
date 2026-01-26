@@ -1,5 +1,6 @@
 import { AthenaClient, StartQueryExecutionCommand, GetQueryExecutionCommand, GetQueryResultsCommand } from '@aws-sdk/client-athena';
-import { SavingsPlansClient, DescribeSavingsPlansCommand } from '@aws-sdk/client-savingsplans';
+import pkg from '@aws-sdk/client-savingsplans';
+const { SavingsPlansClient, DescribeSavingsPlansCommand } = pkg;
 
 const athenaClient = new AthenaClient({ region: 'eu-west-1' });
 const savingsPlansClient = new SavingsPlansClient({ region: 'us-east-1' }); // Savings Plans API is in us-east-1
