@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Loader2, DollarSign, TrendingUp, TrendingDown, Building2, Calendar, Home, Database, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -407,10 +409,10 @@ export function FinOpsAthenaDashboard() {
                         </CardHeader>
                         {showAiAnalysis && aiAnalysis && (
                             <CardContent>
-                                <div className="prose prose-sm max-w-none bg-white dark:bg-zinc-900 rounded-lg p-4 border">
-                                    <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                                <div className="prose prose-sm max-w-none bg-white dark:bg-zinc-900 dark:prose-invert rounded-lg p-4 border text-sm leading-relaxed">
+                                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
                                         {aiAnalysis}
-                                    </div>
+                                    </ReactMarkdown>
                                     <div className="mt-4 pt-3 border-t text-xs text-muted-foreground flex items-center justify-between">
                                         <div className="flex items-center gap-2">
                                             <Sparkles className="h-3 w-3" />
@@ -475,7 +477,8 @@ export function FinOpsAthenaDashboard() {
                     </Card>
 
                 </div>
-            )}
-        </div>
+            )
+            }
+        </div >
     );
 }
