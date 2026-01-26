@@ -1,9 +1,10 @@
 import { AthenaClient, StartQueryExecutionCommand, GetQueryExecutionCommand, GetQueryResultsCommand } from '@aws-sdk/client-athena';
-import pkg from '@aws-sdk/client-savingsplans';
-const { SavingsPlansClient, DescribeSavingsPlansCommand } = pkg;
+// TODO: Enable when Lambda has @aws-sdk/client-savingsplans dependency
+// import pkg from '@aws-sdk/client-savingsplans';
+// const { SavingsPlansClient, DescribeSavingsPlansCommand } = pkg;
 
 const athenaClient = new AthenaClient({ region: 'eu-west-1' });
-const savingsPlansClient = new SavingsPlansClient({ region: 'us-east-1' }); // Savings Plans API is in us-east-1
+// const savingsPlansClient = new SavingsPlansClient({ region: 'us-east-1' }); // Temporarily disabled
 
 export const handler = async (event) => {
     try {
