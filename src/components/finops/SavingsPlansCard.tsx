@@ -35,7 +35,7 @@ export function SavingsPlansCard({ data }: SavingsPlansCardProps) {
                     </div>
                 </div>
                 <CardDescription>
-                    Ahorro total: ${totalSavings.toLocaleString('en-US')} | Coverage: ${totalCoverage.toLocaleString('en-US')} ({accountsWithSP.length} cuentas)
+                    Recursos cubiertos por SP: ${totalCoverage.toLocaleString('en-US')} | Habrías pagado sin descuento: ${(totalCoverage + totalSavings).toLocaleString('en-US')} ({accountsWithSP.length} cuentas)
                 </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
@@ -64,11 +64,11 @@ export function SavingsPlansCard({ data }: SavingsPlansCardProps) {
                                 </div>
                                 <div className="grid grid-cols-2 gap-2 text-xs mb-2">
                                     <div>
-                                        <span className="text-muted-foreground">On-Demand: </span>
+                                        <span className="text-muted-foreground">Sin descuento: </span>
                                         <span className="font-medium">${account.onDemandCost.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
                                     </div>
                                     <div>
-                                        <span className="text-muted-foreground">Con SP: </span>
+                                        <span className="text-muted-foreground">Pagado con SP: </span>
                                         <span className="font-medium text-emerald-600">${account.spCoveredCost.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
                                     </div>
                                 </div>
