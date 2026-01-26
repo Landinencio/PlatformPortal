@@ -8,8 +8,8 @@ import { cn } from "@/lib/utils";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "DevPortal | IskayPet",
-  description: "Internal Developer Portal for IskayPet",
+  title: "Platform Portal",
+  description: "Internal Developer Portal for Platform Engineering",
 };
 
 export default function RootLayout({

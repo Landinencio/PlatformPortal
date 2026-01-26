@@ -115,7 +115,9 @@ ORDER BY sp_covered_cost DESC;
         // Get Savings Plans commitment info
         const savingsPlansCommitment = await getSavingsPlansCommitment();
 
-        // Account name mapping
+        // TODO: Move to environment variable - AWS_ACCOUNT_NAMES
+        // Format: JSON.parse(process.env.AWS_ACCOUNT_NAMES || '{}')
+        // Example: {"123456789012": "Production", "987654321098": "Development"}
         const accountNames = {
             '933315498976': 'EKS Dev / Default', '656056379995': 'EKS UAT', '000339436598': 'EKS Prod',
             '012966899965': 'EKS Tooling', '850014722158': 'Helios Dev', '863836597839': 'Helios UAT',
@@ -237,6 +239,9 @@ ORDER BY sp_covered_cost DESC;
 };
 
 async function executeAthenaQuery(queryString) {
+    // TODO: Move to environment variables
+    // Database: process.env.ATHENA_DATABASE || 'your_database'
+    // S3 Bucket: process.env.ATHENA_RESULTS_BUCKET || 's3://your-bucket/results/'
     const startCommand = new StartQueryExecutionCommand({
         QueryString: queryString,
         QueryExecutionContext: { Database: 'athenacurcfn_finnops' },

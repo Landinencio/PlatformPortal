@@ -147,7 +147,7 @@ export default function UserOnboardingPage() {
                         <Input
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            placeholder="user@iskaypet.com"
+                            placeholder="user@company.com"
                             className="bg-background"
                         />
                     </div>

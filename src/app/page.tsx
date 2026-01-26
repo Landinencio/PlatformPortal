@@ -55,7 +55,7 @@ export default function Home() {
         {/* Header Section */}
         <div className="text-center space-y-4">
           <div className="flex justify-center mb-6">
-            <img src="/logo.svg" alt="IskayPet Logo" className="h-16" />
+            <img src="/logo.svg" alt="Platform Portal Logo" className="h-16" />
           </div>
           <h1 className="text-4xl font-bold tracking-tight text-slate-900">
             Platform Engineering Portal
