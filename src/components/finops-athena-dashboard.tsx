@@ -15,6 +15,7 @@ import { ExcelExportButton } from "./finops/ExcelExportButton";
 import { ServiceComparisonChart } from "./finops/ServiceComparisonChart";
 import { CostTrendChart } from "./finops/CostTrendChart";
 import { QuickFilters } from "./finops/QuickFilters";
+import { SavingsPlansCard } from "./finops/SavingsPlansCard";
 import type { AthenaFinOpsResponse } from "@/types/finops";
 
 // Account list
@@ -430,6 +431,11 @@ export function FinOpsAthenaDashboard() {
                             </CardContent>
                         )}
                     </Card>
+
+                    {/* Savings Plans Card */}
+                    {data?.savingsPlans && (
+                        <SavingsPlansCard data={data.savingsPlans} />
+                    )}
 
                     {/* Quick Filters */}
                     <QuickFilters

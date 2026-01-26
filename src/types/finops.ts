@@ -30,6 +30,20 @@ export interface TopMover {
   accountId?: string;
 }
 
+export interface SavingsPlanAccount {
+  accountId: string;
+  accountName: string;
+  spCoveredCost: number;
+  totalCost: number;
+  coveragePercentage: number;
+  lineItems: number;
+}
+
+export interface SavingsPlansData {
+  totalCoverage: number;
+  byAccount: SavingsPlanAccount[];
+}
+
 export interface AthenaFinOpsResponse {
   executionTime: number;
   dataScanned: string;
@@ -48,6 +62,7 @@ export interface AthenaFinOpsResponse {
     increases: TopMover[];
     decreases: TopMover[];
   };
+  savingsPlans?: SavingsPlansData; // Optional - may not exist for old data
 }
 
 // Legacy types for backward compatibility with Cost Explorer
