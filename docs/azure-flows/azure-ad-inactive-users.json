@@ -1,0 +1,321 @@
+{
+  "name": "Azure AD: Usuarios inactivos (+90 días)",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        16,
+        16
+      ],
+      "id": "25d51192-2d87-4ca0-97d7-2305dc4515e4"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "AZURE_TENANT_ID",
+              "value": "19e73cc9-78d1-4540-862c-5a89572ef80e"
+            },
+            {
+              "name": "AZURE_CLIENT_ID",
+              "value": "bbca2c99-4520-44a8-8108-cb00333e5792"
+            },
+            {
+              "name": "AZURE_CLIENT_SECRET",
+              "value": "REDACTED_AZURE_CLIENT_SECRET_ROTATE_ME"
+            },
+            {
+              "name": "INACTIVE_DAYS_THRESHOLD",
+              "value": "90"
+            },
+            {
+              "name": "EMAIL_TO",
+              "value": "inaki.riesco@iskaypet.com"
+            },
+            {
+              "name": "EMAIL_FROM",
+              "value": "n8n-azure@tooling.dp.iskaypet.com"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        240,
+        16
+      ],
+      "id": "68c4c2a2-5b3d-4d2e-966f-5548b642e483"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://login.microsoftonline.com/{{ $json.AZURE_TENANT_ID }}/oauth2/v2.0/token",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/x-www-form-urlencoded"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "client_id",
+              "value": "={{ $json.AZURE_CLIENT_ID }}"
+            },
+            {
+              "name": "client_secret",
+              "value": "={{ $json.AZURE_CLIENT_SECRET }}"
+            },
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            },
+            {
+              "name": "scope",
+              "value": "https://graph.microsoft.com/.default"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "name": "Get Azure Token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        464,
+        16
+      ],
+      "id": "5117c83e-8b42-4f47-b166-31d66dfed473"
+    },
+    {
+      "parameters": {
+        "jsCode": "const token = $json.access_token;\nconst threshold = parseInt($('Config').first().json['INACTIVE_DAYS_THRESHOLD']) || 90;\nlet script = `\nconst https = require('https');\nconst fs = require('fs');\n\nconst TOKEN = '__TOKEN__';\nconst THRESHOLD_DAYS = __THRESHOLD__;\nconst OUTPUT = '/tmp/azure_inactive_users_report.json';\n\nfunction graphGet(url) {\n  return new Promise((resolve, reject) => {\n    https.get(url, { headers: { 'Authorization': 'Bearer ' + TOKEN } }, res => {\n      let d = '';\n      res.on('data', c => d += c);\n      res.on('end', () => {\n        try { resolve(JSON.parse(d)); }\n        catch(e) { reject(new Error('Parse error')); }\n      });\n    }).on('error', reject);\n  });\n}\n\nasync function paginate(url) {\n  const results = [];\n  while (url) {\n    const d = await graphGet(url);\n    if (d.error) { console.error('API Error:', d.error.message); break; }\n    results.push(...(d.value || []));\n    url = d['@odata.nextLink'] || null;\n    if (results.length % 500 === 0) console.log('  ...' + results.length);\n  }\n  return results;\n}\n\nasync function main() {\n  console.log('Fetching enabled users (beta, with signInActivity)...');\n  const users = await paginate(\n    'https://graph.microsoft.com/beta/users?$filter=accountEnabled%20eq%20true' +\n    '&$select=id,userPrincipalName,createdDateTime,department,signInActivity' +\n    '&$top=100'\n  );\n  console.log('Total enabled users: ' + users.length);\n\n  const now = new Date();\n  const thresholdMs = THRESHOLD_DAYS * 86400000;\n\n  const rows = [];\n  users.forEach(u => {\n    const sia = u.signInActivity || {};\n    const lastI = sia.lastSignInDateTime || null;\n    const lastNI = sia.lastNonInteractiveSignInDateTime || null;\n    \n    let latest = null;\n    if (lastI && lastNI) latest = new Date(lastI) > new Date(lastNI) ? lastI : lastNI;\n    else latest = lastI || lastNI;\n\n    let include = false;\n    let lastLoginDisplay = 'Nunca';\n\n    if (!latest) {\n      include = true;\n    } else {\n      const diff = now - new Date(latest);\n      lastLoginDisplay = latest.substring(0, 19).replace('T', ' ');\n      if (diff > thresholdMs) {\n        include = true;\n      }\n    }\n\n    if (include) {\n      rows.push({\n        userPrincipalName: u.userPrincipalName || '',\n        lastLogin: lastLoginDisplay,\n        createdDate: (u.createdDateTime || '').substring(0, 10),\n        department: u.department || ''\n      });\n    }\n  });\n\n  rows.sort((a, b) => {\n    if (a.lastLogin === 'Nunca' && b.lastLogin !== 'Nunca') return -1;\n    if (a.lastLogin !== 'Nunca' && b.lastLogin === 'Nunca') return 1;\n    if (a.lastLogin === 'Nunca' && b.lastLogin === 'Nunca') return a.userPrincipalName.localeCompare(b.userPrincipalName);\n    return a.lastLogin.localeCompare(b.lastLogin);\n  });\n\n  fs.writeFileSync(OUTPUT, JSON.stringify(rows));\n  const noLogin = rows.filter(r => r.lastLogin === 'Nunca').length;\n  const old90 = rows.length - noLogin;\n  console.log('Stats: ' + noLogin + ' never logged in, ' + old90 + ' >' + THRESHOLD_DAYS + ' days');\n  console.log('TOTAL_INACTIVE: ' + rows.length);\n  console.log('NEVER_LOGIN: ' + noLogin);\n  console.log('OLD_LOGIN: ' + old90);\n  console.log('DONE: ' + rows.length + ' rows saved');\n}\nmain().catch(e => { console.error('FATAL:', e); process.exit(1); });\n`;\nscript = script.replace('__TOKEN__', token);\nscript = script.replace('__THRESHOLD__', threshold);\nconst b64 = Buffer.from(script).toString('base64');\nreturn [{ json: { scriptB64: b64 } }];"
+      },
+      "name": "Build Fetch Script",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        688,
+        16
+      ],
+      "id": "709bcfa8-921d-40c3-b47c-c7cb9b960f06"
+    },
+    {
+      "parameters": {
+        "command": "=echo '{{ $json.scriptB64 }}' | base64 -d | node"
+      },
+      "name": "Fetch Inactive Users",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        912,
+        16
+      ],
+      "id": "85399521-448a-49e3-b958-92e7c6d176f1"
+    },
+    {
+      "parameters": {
+        "jsCode": "let script = `\nconst fs = require('fs');\nconst zlib = require('zlib');\n\nconst rows = JSON.parse(fs.readFileSync('/tmp/azure_inactive_users_report.json', 'utf8'));\nconsole.log('Building Excel for ' + rows.length + ' inactive users...');\n\nfunction esc(s) {\n  if (s == null) return '';\n  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;');\n}\n\nconst hdrs = ['UserPrincipalName','Last Login','Fecha Creación','Departamento'];\n\nconst ssMap = new Map();\nconst ssList = [];\nfunction addSS(s) { const k = String(s); if (!ssMap.has(k)) { ssMap.set(k, ssList.length); ssList.push(k); } return ssMap.get(k); }\nhdrs.forEach(addSS);\nrows.forEach(r => {\n  [r.userPrincipalName, r.lastLogin, r.createdDate, r.department].forEach(addSS);\n});\n\nfunction col(c) { let s=''; while(c>=0){s=String.fromCharCode(65+(c%26))+s;c=Math.floor(c/26)-1;} return s; }\n\nlet sd = '';\nsd += '<row r=\"1\">';\nhdrs.forEach((h,i) => { sd += '<c r=\"'+col(i)+'1\" t=\"s\" s=\"1\"><v>'+addSS(h)+'</v></c>'; });\nsd += '</row>\\\\n';\nrows.forEach((r,ri) => {\n  const rn = ri+2;\n  const vals = [r.userPrincipalName, r.lastLogin, r.createdDate, r.department];\n  sd += '<row r=\"'+rn+'\">';\n  vals.forEach((v,ci) => {\n    let st = '0';\n    if (ci===1 && v==='Nunca') st='2';\n    sd += '<c r=\"'+col(ci)+rn+'\" t=\"s\" s=\"'+st+'\"><v>'+addSS(v)+'</v></c>';\n  });\n  sd += '</row>\\\\n';\n});\n\nconst sheet = '<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\\\\n'+\n  '<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">\\\\n'+\n  '<cols><col min=\"1\" max=\"1\" width=\"45\" customWidth=\"1\"/><col min=\"2\" max=\"2\" width=\"22\" customWidth=\"1\"/>'+\n  '<col min=\"3\" max=\"3\" width=\"16\" customWidth=\"1\"/><col min=\"4\" max=\"4\" width=\"30\" customWidth=\"1\"/></cols>\\\\n'+\n  '<sheetData>\\\\n'+sd+'</sheetData>\\\\n'+\n  '<autoFilter ref=\"A1:D'+(rows.length+1)+'\"/></worksheet>';\n\nconst ss = '<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\\\\n'+\n  '<sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" count=\"'+\n  (hdrs.length + rows.length*4)+'\" uniqueCount=\"'+ssList.length+'\">\\\\n'+\n  ssList.map(s=>'<si><t>'+esc(s)+'</t></si>').join('\\\\n')+'\\\\n</sst>';\n\nconst styles = '<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\\\\n'+\n  '<styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">\\\\n'+\n  '<fonts count=\"2\"><font><sz val=\"11\"/><name val=\"Calibri\"/></font>'+\n  '<font><b/><sz val=\"11\"/><color rgb=\"FFFFFFFF\"/><name val=\"Calibri\"/></font></fonts>\\\\n'+\n  '<fills count=\"4\"><fill><patternFill patternType=\"none\"/></fill>'+\n  '<fill><patternFill patternType=\"gray125\"/></fill>'+\n  '<fill><patternFill patternType=\"solid\"><fgColor rgb=\"FF2F5496\"/></patternFill></fill>'+\n  '<fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFFFC7CE\"/></patternFill></fill></fills>\\\\n'+\n  '<borders count=\"1\"><border><left/><right/><top/><bottom/><diagonal/></border></borders>\\\\n'+\n  '<cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/></cellStyleXfs>\\\\n'+\n  '<cellXfs count=\"3\">'+\n  '<xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/>'+\n  '<xf numFmtId=\"0\" fontId=\"1\" fillId=\"2\" borderId=\"0\" xfId=\"0\" applyFont=\"1\" applyFill=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" wrapText=\"1\"/></xf>'+\n  '<xf numFmtId=\"0\" fontId=\"0\" fillId=\"3\" borderId=\"0\" xfId=\"0\" applyFill=\"1\"><alignment horizontal=\"center\"/></xf>'+\n  '</cellXfs>\\\\n</styleSheet>';\n\nconst ct = '<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\\\\n'+\n  '<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">'+\n  '<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>'+\n  '<Default Extension=\"xml\" ContentType=\"application/xml\"/>'+\n  '<Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/>'+\n  '<Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>'+\n  '<Override PartName=\"/xl/sharedStrings.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml\"/>'+\n  '<Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/>'+\n  '</Types>';\n\nconst rels = '<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\\\\n'+\n  '<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">'+\n  '<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>';\n\nconst wbr = '<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\\\\n'+\n  '<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">'+\n  '<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/>'+\n  '<Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings\" Target=\"sharedStrings.xml\"/>'+\n  '<Relationship Id=\"rId3\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/></Relationships>';\n\nconst wb = '<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\\\\n'+\n  '<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">'+\n  '<sheets><sheet name=\"Usuarios Inactivos\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>';\n\nconst files = [\n  { name: '[Content_Types].xml', data: Buffer.from(ct, 'utf8') },\n  { name: '_rels/.rels', data: Buffer.from(rels, 'utf8') },\n  { name: 'xl/workbook.xml', data: Buffer.from(wb, 'utf8') },\n  { name: 'xl/_rels/workbook.xml.rels', data: Buffer.from(wbr, 'utf8') },\n  { name: 'xl/worksheets/sheet1.xml', data: Buffer.from(sheet, 'utf8') },\n  { name: 'xl/sharedStrings.xml', data: Buffer.from(ss, 'utf8') },\n  { name: 'xl/styles.xml', data: Buffer.from(styles, 'utf8') },\n];\n\nfunction crc32(buf) {\n  let table = crc32.table;\n  if (!table) {\n    table = new Uint32Array(256);\n    for (let i = 0; i < 256; i++) {\n      let c = i;\n      for (let j = 0; j < 8; j++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);\n      table[i] = c;\n    }\n    crc32.table = table;\n  }\n  let crc = 0xFFFFFFFF;\n  for (let i = 0; i < buf.length; i++) crc = table[(crc ^ buf[i]) & 0xFF] ^ (crc >>> 8);\n  return (crc ^ 0xFFFFFFFF) >>> 0;\n}\n\nfunction buildZip(entries) {\n  const localHeaders = [];\n  const centralHeaders = [];\n  let offset = 0;\n  for (const entry of entries) {\n    const nameB = Buffer.from(entry.name, 'utf8');\n    const raw = entry.data;\n    const compressed = zlib.deflateRawSync(raw);\n    const crc = crc32(raw);\n    const lh = Buffer.alloc(30 + nameB.length);\n    lh.writeUInt32LE(0x04034b50, 0);\n    lh.writeUInt16LE(20, 4);\n    lh.writeUInt16LE(0, 6);\n    lh.writeUInt16LE(8, 8);\n    lh.writeUInt16LE(0, 10);\n    lh.writeUInt16LE(0, 12);\n    lh.writeUInt32LE(crc, 14);\n    lh.writeUInt32LE(compressed.length, 18);\n    lh.writeUInt32LE(raw.length, 22);\n    lh.writeUInt16LE(nameB.length, 26);\n    lh.writeUInt16LE(0, 28);\n    nameB.copy(lh, 30);\n    localHeaders.push(Buffer.concat([lh, compressed]));\n    const ch = Buffer.alloc(46 + nameB.length);\n    ch.writeUInt32LE(0x02014b50, 0);\n    ch.writeUInt16LE(20, 4);\n    ch.writeUInt16LE(20, 6);\n    ch.writeUInt16LE(0, 8);\n    ch.writeUInt16LE(8, 10);\n    ch.writeUInt16LE(0, 12);\n    ch.writeUInt16LE(0, 14);\n    ch.writeUInt32LE(crc, 16);\n    ch.writeUInt32LE(compressed.length, 20);\n    ch.writeUInt32LE(raw.length, 24);\n    ch.writeUInt16LE(nameB.length, 28);\n    ch.writeUInt16LE(0, 30);\n    ch.writeUInt16LE(0, 32);\n    ch.writeUInt16LE(0, 34);\n    ch.writeUInt16LE(0, 36);\n    ch.writeUInt32LE(0, 38);\n    ch.writeUInt32LE(offset, 42);\n    nameB.copy(ch, 46);\n    centralHeaders.push(ch);\n    offset += lh.length + compressed.length;\n  }\n  const centralDir = Buffer.concat(centralHeaders);\n  const centralDirOffset = offset;\n  const eocd = Buffer.alloc(22);\n  eocd.writeUInt32LE(0x06054b50, 0);\n  eocd.writeUInt16LE(0, 4);\n  eocd.writeUInt16LE(0, 6);\n  eocd.writeUInt16LE(entries.length, 8);\n  eocd.writeUInt16LE(entries.length, 10);\n  eocd.writeUInt32LE(centralDir.length, 12);\n  eocd.writeUInt32LE(centralDirOffset, 16);\n  eocd.writeUInt16LE(0, 20);\n  return Buffer.concat([...localHeaders, centralDir, eocd]);\n}\n\nconst zipBuf = buildZip(files);\nconst out = '/tmp/usuarios_inactivos_90d.xlsx';\nfs.writeFileSync(out, zipBuf);\nconst b64 = zipBuf.toString('base64');\nfs.writeFileSync('/tmp/inactive_xlsx_b64.txt', b64);\nconsole.log('Excel: ' + zipBuf.length + ' bytes, b64: ' + b64.length);\nconsole.log('DONE');\n`;\nconst b64 = Buffer.from(script).toString('base64');\nreturn [{ json: { scriptB64: b64 } }];"
+      },
+      "name": "Build Excel Script",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1136,
+        16
+      ],
+      "id": "bba1fa84-9232-4dee-8f24-3985bc5a6196"
+    },
+    {
+      "parameters": {
+        "command": "=echo '{{ $json.scriptB64 }}' | base64 -d | node"
+      },
+      "name": "Generate Excel",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1360,
+        16
+      ],
+      "id": "836428c3-8411-4cb2-b756-9db84cc9c723"
+    },
+    {
+      "parameters": {
+        "command": "cat /tmp/inactive_xlsx_b64.txt"
+      },
+      "name": "Read Excel B64",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1584,
+        16
+      ],
+      "id": "9dcbece3-055c-49d5-9cfd-46c759015e44"
+    },
+    {
+      "parameters": {
+        "jsCode": "const xlsxB64 = $json.stdout.trim();\nconst emailTo = $('Config').first().json['EMAIL_TO'];\nconst emailFrom = $('Config').first().json['EMAIL_FROM'];\nconst now = new Date().toISOString().substring(0, 10);\nconst po = $('Fetch Inactive Users').first().json.stdout || '';\nconst total = (po.match(/TOTAL_INACTIVE: (\\d+)/) || [])[1] || '?';\nconst nc = (po.match(/NEVER_LOGIN: (\\d+)/) || [])[1] || '?';\nconst oc = (po.match(/OLD_LOGIN: (\\d+)/) || [])[1] || '?';\nconst subject = 'Usuarios inactivos (+90 días) - Reporte ' + now;\nconst html = '<html><body style=\"font-family:Arial,sans-serif;font-size:14px;color:#333\">'\n  + '<h2 style=\"color:#2F5496\">Reporte de usuarios inactivos en Azure AD</h2>'\n  + '<p>Se adjunta el listado de usuarios habilitados en Azure AD que <b>no han iniciado sesión</b> o cuyo <b>último login supera los 90 días</b>.</p>'\n  + '<table style=\"border-collapse:collapse;margin:16px 0\">'\n  + '<tr><td style=\"padding:4px 12px;font-weight:bold\">Total usuarios inactivos:</td><td>' + total + '</td></tr>'\n  + '<tr><td style=\"padding:4px 12px;font-weight:bold\">Sin login nunca:</td><td>' + nc + '</td></tr>'\n  + '<tr><td style=\"padding:4px 12px;font-weight:bold\">Último login &gt; 90 días:</td><td>' + oc + '</td></tr>'\n  + '</table>'\n  + '<p><b>Campos del reporte:</b></p>'\n  + '<ul><li>UserPrincipalName</li><li>Last Login</li><li>Fecha Creación</li><li>Departamento</li></ul>'\n  + '<p>Fecha: <b>' + now + '</b></p>'\n  + '<p style=\"font-size:12px;color:#999;margin-top:24px\">Generado automáticamente por n8n.</p>'\n  + '</body></html>';\nconst fileName = 'Usuarios_Inactivos_90d_' + now + '.xlsx';\nreturn [{\n  json: { subject, html, emailTo, emailFrom, fileName },\n  binary: {\n    attachment: {\n      data: xlsxB64,\n      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',\n      fileName: fileName\n    }\n  }\n}];"
+      },
+      "name": "Prepare Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1808,
+        16
+      ],
+      "id": "56f8efca-7a82-4ee4-a7a0-6195b4bb9051"
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $json.emailFrom }}",
+        "toEmail": "={{ $json.emailTo }}",
+        "subject": "={{ $json.subject }}",
+        "html": "={{ $json.html }}",
+        "options": {
+          "attachments": "attachment"
+        }
+      },
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        2032,
+        16
+      ],
+      "id": "7988f3d7-7f4f-42f1-8f22-f0a973ba7343",
+      "webhookId": "3ef4d112-1c98-4292-9adb-4efe8c11ef84",
+      "credentials": {
+        "smtp": {
+          "id": "BnsgykToCoSaofzV",
+          "name": "SMTP account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Get Azure Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Azure Token": {
+      "main": [
+        [
+          {
+            "node": "Build Fetch Script",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Fetch Script": {
+      "main": [
+        [
+          {
+            "node": "Fetch Inactive Users",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Inactive Users": {
+      "main": [
+        [
+          {
+            "node": "Build Excel Script",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Excel Script": {
+      "main": [
+        [
+          {
+            "node": "Generate Excel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Excel": {
+      "main": [
+        [
+          {
+            "node": "Read Excel B64",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Excel B64": {
+      "main": [
+        [
+          {
+            "node": "Prepare Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Email": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "07f12871-8ff9-4a66-adc8-373c047e1c92",
+  "meta": {
+    "instanceId": "c52849af140fecdfb0c6d81c4296e78a8cded6ecf6ac196569f43a8812b332a0"
+  },
+  "id": "siVTxLjjSWcUfdUu",
+  "tags": []
+}

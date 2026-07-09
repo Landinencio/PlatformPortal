@@ -43,20 +43,28 @@ export function AccountMultiSelect({
     };
 
     const toggleAll = () => {
-        if (selectedIds.length === accounts.length) {
+        const visibleIds = filteredAccounts.map(a => a.id);
+        if (selectedIds.length === visibleIds.length && visibleIds.every(id => selectedIds.includes(id))) {
             onChange([]);
         } else {
-            onChange(accounts.map(a => a.id));
+            onChange(visibleIds);
         }
     };
 
     const selectedAccounts = accounts.filter(a => selectedIds.includes(a.id));
 
-    // Filter logic
-    const filteredAccounts = accounts.filter(account =>
-        account.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        account.id.includes(searchTerm)
-    );
+    // Filter logic — also hide accounts where name is just the ID (unresolved)
+    const filteredAccounts = accounts
+      .filter(account => {
+        // Skip accounts where name is just the numeric ID (unresolved from Organizations)
+        const nameIsJustId = /^\d{6,}$/.test(account.name);
+        if (nameIsJustId) return false;
+        // Search filter
+        if (!searchTerm) return true;
+        return account.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          account.id.includes(searchTerm);
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
 
     return (
         <Popover open={open} onOpenChange={setOpen}>
@@ -131,7 +139,7 @@ export function AccountMultiSelect({
                                     >
                                         <Check className="h-4 w-4" />
                                     </div>
-                                    <span className="font-semibold">Select All ({accounts.length})</span>
+                                    <span className="font-semibold">Select All ({filteredAccounts.length})</span>
                                 </div>
 
                                 {/* Items */}
@@ -155,8 +163,8 @@ export function AccountMultiSelect({
                                             <Check className="h-4 w-4" />
                                         </div>
                                         <span className="flex-1 truncate">{account.name}</span>
-                                        <span className="ml-2 text-xs text-muted-foreground tabular-nums">
-                                            {account.id.slice(-6)}
+                                        <span className="ml-2 text-[10px] text-muted-foreground/60 font-mono">
+                                            {account.id}
                                         </span>
                                     </div>
                                 ))}

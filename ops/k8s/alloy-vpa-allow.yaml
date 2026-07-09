@@ -1,0 +1,22 @@
+# Allow VPA recommendation metrics through Alloy's metric processing.
+#
+# The grafana-k8s-monitoring chart filters metrics from KSM with a `keep`
+# regex (kube_*) that doesn't include the kube_customresource_* family
+# emitted by the standalone CRS-only KSM (ops/k8s/ksm-vpa-standalone.yaml).
+# We append our metric names to `metricsTuning.includeMetrics` so they pass.
+#
+# Apply with:
+#   helm upgrade grafana-k8s-monitoring grafana/k8s-monitoring \
+#     --version 3.8.5 -n cloud-agent --reuse-values \
+#     -f ops/k8s/alloy-vpa-allow.yaml
+clusterMetrics:
+  kube-state-metrics:
+    metricsTuning:
+      includeMetrics:
+        - kube_customresource_verticalpodautoscaler_recommendation_cpu_target_cores
+        - kube_customresource_verticalpodautoscaler_recommendation_cpu_lowerbound_cores
+        - kube_customresource_verticalpodautoscaler_recommendation_cpu_upperbound_cores
+        - kube_customresource_verticalpodautoscaler_recommendation_memory_target_bytes
+        - kube_customresource_verticalpodautoscaler_recommendation_memory_lowerbound_bytes
+        - kube_customresource_verticalpodautoscaler_recommendation_memory_upperbound_bytes
+        - kube_customresource_verticalpodautoscaler_spec_updatemode

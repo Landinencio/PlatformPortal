@@ -1,0 +1,62 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: k8s-metrics-snapshot
+  namespace: n8n
+  labels:
+    app: k8s-snapshot
+spec:
+  schedule: "0 19 * * *"  # 19:00 UTC daily (21:00 Madrid) — after DORA snapshot at 18:00
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1800  # 30 min max
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels:
+            app: k8s-snapshot
+        spec:
+          restartPolicy: Never
+          serviceAccountName: n8n-webhooks
+          imagePullSecrets:
+            - name: harbor-registry
+          containers:
+            - name: snapshot
+              image: alpine:3.19
+              imagePullPolicy: IfNotPresent
+              command: ["sh", "-c"]
+              args:
+                - |
+                  apk add --no-cache wget
+                  SNAPSHOT_DATE=$(date -d "yesterday" +%Y-%m-%d)
+                  echo "=== K8s Metrics Snapshot: $SNAPSHOT_DATE ==="
+                  PORTAL_URL="http://n8n-webhooks.n8n.svc.cluster.local:3000"
+                  response=$(wget -qO- --timeout=1500 \
+                    --header="x-internal-secret: $INTERNAL_API_SECRET" \
+                    --header="Content-Type: application/json" \
+                    --post-data="" \
+                    "$PORTAL_URL/api/metrics/k8s-snapshot?date=$SNAPSHOT_DATE" 2>&1 || echo "WGET_ERROR")
+                  if echo "$response" | grep -q '"success":true'; then
+                    echo "OK: K8s snapshot for $SNAPSHOT_DATE completed"
+                    echo "$response" | head -c 300
+                  else
+                    echo "FAIL: $response" | head -c 300
+                    exit 1
+                  fi
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+                limits:
+                  cpu: 500m
+                  memory: 256Mi
+              env:
+                - name: INTERNAL_API_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: platformportal-secrets
+                      key: INTERNAL_API_SECRET

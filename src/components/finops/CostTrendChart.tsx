@@ -1,25 +1,36 @@
 "use client";
 
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useI18n } from "@/lib/i18n";
 
 interface CostTrendChartProps {
-    currentPeriodData: { date: string; cost: number }[];
-    previousPeriodData: { date: string; cost: number }[];
+    currentPeriodCost: number;
+    previousPeriodCost: number;
+    currentPeriodLabel?: string;
+    previousPeriodLabel?: string;
+    description?: string;
 }
 
-export function CostTrendChart({ currentPeriodData, previousPeriodData }: CostTrendChartProps) {
-
-    // For now, we'll create a simple comparison of current vs previous period
-    // This will be enhanced when we get daily breakdown from backend
+export function CostTrendChart({
+    currentPeriodCost,
+    previousPeriodCost,
+    currentPeriodLabel,
+    previousPeriodLabel,
+    description
+}: CostTrendChartProps) {
+    const { t } = useI18n();
+    const resolvedCurrentLabel = currentPeriodLabel ?? t("costs.currentPeriod");
+    const resolvedPreviousLabel = previousPeriodLabel ?? t("costs.previousPeriod");
+    const resolvedDescription = description ?? t("costs.periodComparisonDesc");
     const data = [
         {
-            period: 'Previous Period',
-            cost: previousPeriodData.reduce((sum, d) => sum + d.cost, 0)
+            period: resolvedPreviousLabel,
+            cost: previousPeriodCost
         },
         {
-            period: 'Current Period',
-            cost: currentPeriodData.reduce((sum, d) => sum + d.cost, 0)
+            period: resolvedCurrentLabel,
+            cost: currentPeriodCost
         }
     ];
 
@@ -40,32 +51,21 @@ export function CostTrendChart({ currentPeriodData, previousPeriodData }: CostTr
     return (
         <Card className="border-none shadow-lg">
             <CardHeader>
-                <CardTitle>Cost Trend Comparison</CardTitle>
-                <CardDescription>
-                    Current period vs Previous period
-                </CardDescription>
+                <CardTitle>{t("costs.periodComparison")}</CardTitle>
+                <CardDescription>{resolvedDescription}</CardDescription>
             </CardHeader>
             <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={data} margin={{ top: 10, right: 30, left: 20, bottom: 10 }}>
+                    <BarChart data={data} margin={{ top: 10, right: 30, left: 20, bottom: 10 }}>
                         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                         <XAxis dataKey="period" className="text-xs" />
                         <YAxis
-                            tickFormatter={(value) => `$${value.toLocaleString()}`}
+                            tickFormatter={(value) => `$${Number(value).toLocaleString()}`}
                             className="text-xs"
                         />
                         <Tooltip content={<CustomTooltip />} />
-                        <Legend />
-                        <Line
-                            type="monotone"
-                            dataKey="cost"
-                            stroke="hsl(var(--primary))"
-                            strokeWidth={3}
-                            dot={{ fill: 'hsl(var(--primary))', r: 6 }}
-                            activeDot={{ r: 8 }}
-                            name="Total Cost ($)"
-                        />
-                    </LineChart>
+                        <Bar dataKey="cost" fill="hsl(var(--primary))" radius={[8, 8, 0, 0]} name="Total Cost ($)" />
+                    </BarChart>
                 </ResponsiveContainer>
             </CardContent>
         </Card>

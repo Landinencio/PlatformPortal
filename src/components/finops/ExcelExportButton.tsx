@@ -3,15 +3,27 @@
 import { useState } from "react";
 import { Download, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { AthenaFinOpsResponse } from "@/types/finops";
+import type { AccountSummary, AthenaFinOpsResponse } from "@/types/finops";
+import { formatAwsServiceName } from "@/lib/finops-format";
+import { useI18n } from "@/lib/i18n";
 
 interface ExcelExportButtonProps {
     data: AthenaFinOpsResponse;
+    accounts?: AccountSummary[];
     disabled?: boolean;
 }
 
-export function ExcelExportButton({ data, disabled }: ExcelExportButtonProps) {
+export function ExcelExportButton({ data, accounts, disabled }: ExcelExportButtonProps) {
     const [isExporting, setIsExporting] = useState(false);
+    const { t } = useI18n();
+    const scopedAccounts = accounts ?? data.accounts;
+    const scopedServiceMap = new Map<string, number>();
+    scopedAccounts.forEach((account) => {
+        account.services.forEach((service) => {
+            scopedServiceMap.set(service.name, (scopedServiceMap.get(service.name) || 0) + service.cost);
+        });
+    });
+    const scopedTopServiceEntry = [...scopedServiceMap.entries()].sort((a, b) => b[1] - a[1])[0] || null;
 
     const exportToExcel = async () => {
         setIsExporting(true);
@@ -22,28 +34,28 @@ export function ExcelExportButton({ data, disabled }: ExcelExportButtonProps) {
 
             // Sheet 1: Summary
             const summaryData = [
-                ['FinOps Cost Report'],
-                ['Generated:', new Date().toLocaleString()],
-                ['Period:', `${data.dateRange.start} to ${data.dateRange.end}`],
+                [t("costs.finopsReport")],
+                [t("costs.generated"), new Date().toLocaleString()],
+                [t("costs.period"), `${data.dateRange.start} to ${data.dateRange.end}`],
                 [],
-                ['Total Cost', `$${data.summary.totalCost.toLocaleString('en-US', { minimumFractionDigits: 2 })}`],
-                ['Accounts Analyzed', data.summary.accountCount],
-                ['Top Service', data.summary.topService.name],
-                ['Top Service Cost', `$${data.summary.topService.cost.toLocaleString('en-US', { minimumFractionDigits: 2 })}`],
-                ['Top Service Trend', `${data.summary.topService.trend.change >= 0 ? '+' : ''}${data.summary.topService.trend.percentage.toFixed(1)}%`],
+                [t("costs.totalCost"), `$${scopedAccounts.reduce((sum, account) => sum + account.totalCost, 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`],
+                [t("costs.accountsAnalyzed"), scopedAccounts.length],
+                [t("costs.topService"), scopedTopServiceEntry ? formatAwsServiceName(scopedTopServiceEntry[0]) : '-'],
+                [t("costs.topServiceCost"), scopedTopServiceEntry ? `$${scopedTopServiceEntry[1].toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '-'],
+                [t("costs.topServiceTrend"), `${data.summary.topService.trend.change >= 0 ? '+' : ''}${data.summary.topService.trend.percentage.toFixed(1)}%`],
                 [],
-                ['Top Cost Increases'],
+                [t("costs.topCostIncreases")],
                 ['Service', 'Change ($)', 'Change (%)'],
                 ...data.topMovers.increases.map(m => [
-                    m.service,
+                    formatAwsServiceName(m.service),
                     m.change.toFixed(2),
                     `${m.percentage.toFixed(1)}%`
                 ]),
                 [],
-                ['Top Cost Decreases'],
+                [t("costs.topCostDecreases")],
                 ['Service', 'Change ($)', 'Change (%)'],
                 ...data.topMovers.decreases.map(m => [
-                    m.service,
+                    formatAwsServiceName(m.service),
                     m.change.toFixed(2),
                     `${m.percentage.toFixed(1)}%`
                 ])
@@ -52,25 +64,25 @@ export function ExcelExportButton({ data, disabled }: ExcelExportButtonProps) {
             // Sheet 2: By Account
             const accountData = [
                 ['Account ID', 'Account Name', 'Total Cost', 'Trend ($)', 'Trend (%)', 'Top Service', 'Top Service Cost'],
-                ...data.accounts.map(acc => [
+                ...scopedAccounts.map(acc => [
                     acc.accountId,
                     acc.accountName,
                     acc.totalCost.toFixed(2),
                     acc.trend.change.toFixed(2),
                     `${acc.trend.percentage.toFixed(1)}%`,
-                    acc.topService.name,
+                    formatAwsServiceName(acc.topService.name),
                     acc.topService.cost.toFixed(2)
                 ])
             ];
 
             // Sheet 3: All Services by Account
             const serviceData = [['Account ID', 'Account Name', 'Service', 'Cost', 'Trend ($)', 'Trend (%)']];
-            data.accounts.forEach(acc => {
+            scopedAccounts.forEach(acc => {
                 acc.services.forEach(svc => {
                     serviceData.push([
                         acc.accountId,
                         acc.accountName,
-                        svc.name,
+                        formatAwsServiceName(svc.name),
                         svc.cost.toFixed(2),
                         svc.trend ? svc.trend.change.toFixed(2) : '0',
                         svc.trend ? `${svc.trend.percentage.toFixed(1)}%` : '0%'
@@ -102,7 +114,7 @@ export function ExcelExportButton({ data, disabled }: ExcelExportButtonProps) {
 
         } catch (error) {
             console.error('Export failed:', error);
-            alert('Failed to export Excel file. Please try again.');
+            alert(t("costs.exportFailed"));
         } finally {
             setIsExporting(false);
         }
@@ -119,12 +131,12 @@ export function ExcelExportButton({ data, disabled }: ExcelExportButtonProps) {
             {isExporting ? (
                 <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Exporting...
+                    {t("costs.exporting")}
                 </>
             ) : (
                 <>
                     <Download className="h-4 w-4" />
-                    Export Excel
+                    {t("costs.exportExcel")}
                 </>
             )}
         </Button>

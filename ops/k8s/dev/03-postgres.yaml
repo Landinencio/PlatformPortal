@@ -1,0 +1,81 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: platformportal-postgres-dev-pvc
+  namespace: platformportal
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: gp3
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: platformportal-postgres-dev
+  namespace: platformportal
+  labels:
+    app: platformportal-postgres-dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: platformportal-postgres-dev
+  template:
+    metadata:
+      labels:
+        app: platformportal-postgres-dev
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: platformportal
+            - name: POSTGRES_USER
+              value: platformportal
+            - name: POSTGRES_PASSWORD
+              value: platformportal_dev_2026
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "platformportal"]
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "platformportal"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: platformportal-postgres-dev-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: platformportal-postgres-dev
+  namespace: platformportal
+spec:
+  selector:
+    app: platformportal-postgres-dev
+  ports:
+    - port: 5432
+      targetPort: 5432

@@ -1,0 +1,82 @@
+# =============================================================================
+# mr-backfill-job.yaml — Job puntual (one-off) de backfill histórico per-MR
+# =============================================================================
+# PLANTILLA. Rellena los placeholders antes de aplicar (marcados con CHANGE-ME).
+#
+# Deriva del CronJob `mr-metrics-snapshot` (ops/mr-metrics-cronjob.yaml / GitOps
+# generic-chart): MISMA imagen `tooling/mr-metrics-snapshot`, MISMO `envFrom:
+# portal-env`, MISMO comando. La única diferencia es que define `BACKFILL_FROM`
+# (y opcionalmente `BACKFILL_TO`), lo que activa el modo backfill en
+# `mr-metrics-snapshot.js` (resolveWindow) — rellena `mr_review_metrics` con los
+# MRs mergeados anteriores al límite de cobertura actual `B`.
+#
+# El backfill es IDEMPOTENTE (upsert ON CONFLICT (project_id, mr_iid)) y
+# REANUDABLE: si el Job cae a media ejecución, basta re-lanzarlo desde el
+# principio sin duplicar filas. Ejecutar OFF-PEAK (recorre ~971 repos).
+#
+# El CronJob diario `mr-metrics-snapshot` sigue corriendo SIN CAMBIOS: este Job
+# no lo toca (no define BACKFILL_* → modo incremental intacto).
+#
+# Aplicar:  kubectl --context arn:aws:eks:eu-west-1:444455556666:cluster/dp-tooling \
+#             -n n8n apply -f ops/k8s/mr-backfill-job.yaml
+# Ver docs: ops/k8s/MR_BACKFILL.md
+# =============================================================================
+apiVersion: batch/v1
+kind: Job
+metadata:
+  # CHANGE-ME: nombre único por backfill (p. ej. el trimestre/rango cubierto).
+  name: mr-backfill-2026q1
+  namespace: n8n
+  labels:
+    app: mr-metrics-snapshot
+    job-type: backfill
+spec:
+  # No reintentar automáticamente: el backfill es largo; mejor revisar y re-lanzar a mano.
+  backoffLimit: 0
+  # Timeout amplio (24h): el backfill recorre todos los repos y todas las páginas.
+  activeDeadlineSeconds: 86400
+  # Limpieza automática del Job 48h después de terminar.
+  ttlSecondsAfterFinished: 172800
+  template:
+    metadata:
+      labels:
+        app: mr-metrics-snapshot
+        job-type: backfill
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: harbor-registry
+      containers:
+        - name: mr-metrics
+          # CHANGE-ME: usar el MISMO tag que el CronJob desplegado (lo escribe el
+          # pipeline en argocd/tooling). `latest` casa con el cron, que ya tiene
+          # imagePullPolicy: Always.
+          image: harbor.tooling.dp.iskaypet.com/tooling/mr-metrics-snapshot:latest
+          imagePullPolicy: Always
+          # Mismo comando que el CronJob (CMD de la imagen).
+          command: ["node", "/app/mr-metrics-snapshot.js"]
+          # Mismo origen de configuración que el CronJob GitOps: el Secret
+          # `portal-env` (materializado por ESO) trae DATABASE_URL, GITLAB_TOKEN,
+          # GITLAB_URL, etc.
+          envFrom:
+            - secretRef:
+                name: portal-env
+          env:
+            # --- Activación del modo backfill -----------------------------------
+            # CHANGE-ME (REQUERIDO): inicio del histórico a rellenar (YYYY-MM-DD).
+            # Su presencia es lo que activa el modo backfill en resolveWindow.
+            - name: BACKFILL_FROM
+              value: "2026-01-01"
+            # OPCIONAL: fin del backfill (YYYY-MM-DD). Por defecto = `B` (la fecha
+            # de merge más antigua ya presente en mr_review_metrics), de modo que
+            # el backfill NUNCA invade el rango que el detalle ya servía
+            # (preservación por construcción). Descomentar solo para acotar.
+            # - name: BACKFILL_TO
+            #   value: "2026-04-22"
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"

@@ -1,0 +1,123 @@
+# syntax=docker/dockerfile:1
+#
+# AI Portal Explorer — job image (spec ai-portal-explorer, task 15.3)
+# =============================================================================
+# Read-only QA crawler of the Platform Portal (portal-dev) under every RBAC role.
+# Uses PLAYWRIGHT (headless Chromium) to visit routes with synthetic sessions,
+# runs deterministic anomaly detection and Bedrock triage, and persists a report.
+#
+# -----------------------------------------------------------------------------
+# BUILD CONTEXT: repo ROOT (NOT `ops/`)  ── deliberate deviation from the
+# lighthouse / mr-metrics aux pattern.
+# -----------------------------------------------------------------------------
+# The lighthouse and mr-metrics runners are SELF-CONTAINED single `.js` files
+# that only need `node_modules`, so their images build with context `ops/`
+# (their `COPY` is relative to `ops/`). This image CANNOT do that: the runner
+# `ops/portal-explorer/run.ts` is TypeScript and imports the whole Explorer tree
+# (`src/lib/explorer/*`) plus its transitive deps (`@/lib/rbac`, `@/lib/db`,
+# `@/lib/bedrock`, `@/lib/teams-notify`, …) through the `@/*` path alias. Those
+# live under `src/`, so the image needs BOTH `src/` and `ops/portal-explorer/`.
+# Therefore this Dockerfile is built from the REPO ROOT.
+#
+#   docker buildx build --platform linux/amd64 \
+#     -f ops/Dockerfile.portal-explorer \
+#     -t harbor.tooling.dp.iskaypet.com/tooling/portal-explorer:<tag> .
+#
+# NOTE for the CI pipeline (separate toolkit repo, build-portal-aux job):
+#   * This image's build context MUST be the repo root, while the OTHER aux
+#     images (mr-metrics, lighthouse) keep context `ops/`. The aux build job
+#     special-cases this image's context (AUX_CONTEXT=".").
+#   * The build uses kaniko, which honours ONLY the context-root `.dockerignore`
+#     (NOT BuildKit's per-Dockerfile ignore). The root `.dockerignore` therefore
+#     excludes `ops/*` but RE-INCLUDES `!ops/portal-explorer`, so this image gets
+#     `src/`, `package*.json`, `tsconfig*.json` and `ops/portal-explorer/` while
+#     the main portal build context is essentially unchanged (it doesn't COPY
+#     ops/portal-explorer).
+#
+# -----------------------------------------------------------------------------
+# ENTRYPOINT vs CRONJOB COMMAND
+# -----------------------------------------------------------------------------
+# The runner is TypeScript executed with `tsx` (it resolves the `@/*` alias via
+# `tsconfig.test.json`), so the entrypoint here is:
+#       npx tsx ops/portal-explorer/run.ts
+# The CronJob (`.helm/values.yaml`) does NOT override `command:`, so it uses this
+# image's CMD (single source of truth). Do not add a `command:` pointing at a
+# compiled `/app/run.js` — there is none (bundling the whole `src/` tree was
+# rejected as needless complexity).
+# =============================================================================
+
+FROM node:20-slim
+
+# Pinned Playwright version. Must match the browser installed by
+# `playwright install` below (the npm package and its bundled browser are
+# version-locked). `playwright` is NOT a project dependency (the crawler imports
+# it dynamically and only this image needs it), so it is installed explicitly.
+ENV PLAYWRIGHT_VERSION=1.49.1
+
+WORKDIR /app
+
+# ---------------------------------------------------------------------------
+# 1. Chromium system libraries (same family as Dockerfile.lighthouse). These are
+#    the shared libs headless Chromium needs; `playwright install --with-deps`
+#    below also pulls OS deps, but we keep the explicit set for reproducibility
+#    and faster, cache-friendly layers.
+# ---------------------------------------------------------------------------
+RUN apt-get update && apt-get install -y \
+    fonts-liberation \
+    libasound2 \
+    libatk-bridge2.0-0 \
+    libatk1.0-0 \
+    libcups2 \
+    libdbus-1-3 \
+    libdrm2 \
+    libgbm1 \
+    libgtk-3-0 \
+    libnspr4 \
+    libnss3 \
+    libx11-xcb1 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxrandr2 \
+    xdg-utils \
+    --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
+
+# ---------------------------------------------------------------------------
+# 2. Project dependencies. The Explorer reuses `src/lib/*`, which imports next-auth
+#    (auth-minter), pg (db/report-store), the AWS SDK (bedrock/report-s3), etc.,
+#    so the full project dependency set must be installed (`npm ci`, reproducible
+#    from package-lock.json). `tsx` is a devDependency, so we install dev deps too.
+# ---------------------------------------------------------------------------
+COPY package.json package-lock.json ./
+RUN npm ci && npm cache clean --force
+
+# ---------------------------------------------------------------------------
+# 3. Playwright + headless Chromium. `playwright` is installed at the pinned
+#    version, then `playwright install --with-deps chromium` downloads the
+#    matching Chromium build and any remaining OS deps. The crawler launches with
+#    `--no-sandbox` so running as root is fine.
+# ---------------------------------------------------------------------------
+RUN npm install --no-save "playwright@${PLAYWRIGHT_VERSION}" \
+    && npx playwright install --with-deps chromium
+
+# ---------------------------------------------------------------------------
+# 4. Application sources. `src/` provides the Explorer modules (resolved via the
+#    `@/*` alias) and `ops/portal-explorer/run.ts` is the entrypoint. The tsconfig
+#    files supply the path-alias mapping consumed by tsx (TSX_TSCONFIG_PATH).
+# ---------------------------------------------------------------------------
+COPY tsconfig.json tsconfig.test.json ./
+COPY src ./src
+COPY ops/portal-explorer ./ops/portal-explorer
+
+# ---------------------------------------------------------------------------
+# 5. Runtime environment.
+# ---------------------------------------------------------------------------
+ENV NODE_ENV=production
+# tsx resolves the `@/*` alias from this tsconfig (paths: { "@/*": ["./src/*"] }).
+ENV TSX_TSCONFIG_PATH=tsconfig.test.json
+# Headless Chromium niceties (the crawler also passes --no-sandbox / --disable-dev-shm-usage).
+ENV PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=1
+
+# Entrypoint: run the TypeScript runner via tsx. See the ENTRYPOINT/CRONJOB note
+# above about reconciling the CronJob `command:` override in task 19.1.
+CMD ["npx", "tsx", "ops/portal-explorer/run.ts"]

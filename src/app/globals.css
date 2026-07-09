@@ -4,74 +4,91 @@
 
 @layer base {
   :root {
-    /* IskayPet Brand Colors */
-    /* Background: Cream/Beige */
-    --background: 25 40% 96%;
-    /* Foreground: Dark Brown */
-    --foreground: 15 25% 25%;
+    /* IskayPet Warm Professional Theme */
+    --background: 30 35% 97%;
+    --foreground: 20 25% 18%;
+    --surface: 0 0% 100%;
+    --surface-muted: 28 24% 95%;
+    --surface-strong: 28 20% 90%;
 
-    /* Cards with white background */
     --card: 0 0% 100%;
-    --card-foreground: 15 25% 25%;
+    --card-foreground: 20 25% 18%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 15 25% 25%;
+    --popover-foreground: 20 25% 18%;
 
-    /* Primary: IskayPet Coral/Terracotta #D5866E */
-    --primary: 15 55% 63%;
+    /* Brand Primary */
+    --primary: 18 60% 55%;
     --primary-foreground: 0 0% 100%;
 
-    /* Secondary: Soft beige for secondary actions */
-    --secondary: 25 30% 92%;
-    --secondary-foreground: 15 25% 25%;
+    --secondary: 28 22% 92%;
+    --secondary-foreground: 20 25% 18%;
 
-    --muted: 25 20% 94%;
-    --muted-foreground: 15 15% 45%;
+    --muted: 28 18% 93%;
+    --muted-foreground: 20 12% 45%;
 
-    /* Accent: Lighter coral tint */
-    --accent: 15 40% 95%;
-    --accent-foreground: 15 25% 25%;
+    --accent: 18 40% 92%;
+    --accent-foreground: 20 25% 18%;
 
-    --destructive: 0 84% 60%;
+    --destructive: 0 72% 55%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 25 15% 88%;
-    --input: 25 15% 88%;
-    --ring: 15 55% 63%;
+    --border: 28 18% 86%;
+    --input: 28 18% 86%;
+    --ring: 18 60% 55%;
 
-    --radius: 0.5rem;
+    --radius: 0.6rem;
+
+    /* Semantic colors */
+    --success: 145 55% 45%;
+    --warning: 35 90% 55%;
+    --danger: 0 72% 55%;
+    --info: 210 85% 55%;
+
+    /* Background glows */
+    --bg-glow-1: 18 60% 55%;
+    --bg-glow-2: 35 80% 60%;
   }
 
   .dark {
-    /* Dark Mode - Warm dark tones */
-    --background: 15 15% 12%;
-    --foreground: 25 30% 92%;
+    --background: 18 12% 12%;
+    --foreground: 30 30% 92%;
+    --surface: 18 12% 16%;
+    --surface-muted: 18 12% 20%;
+    --surface-strong: 18 12% 24%;
 
-    --card: 15 15% 15%;
-    --card-foreground: 25 30% 92%;
+    --card: 18 12% 16%;
+    --card-foreground: 30 30% 92%;
 
-    --popover: 15 15% 15%;
-    --popover-foreground: 25 30% 92%;
+    --popover: 18 12% 16%;
+    --popover-foreground: 30 30% 92%;
 
-    /* Primary: Lighter coral for visibility on dark */
-    --primary: 15 55% 68%;
-    --primary-foreground: 15 15% 12%;
+    --primary: 18 60% 62%;
+    --primary-foreground: 18 12% 12%;
 
-    --secondary: 15 15% 20%;
-    --secondary-foreground: 25 30% 92%;
+    --secondary: 18 12% 20%;
+    --secondary-foreground: 30 30% 92%;
 
-    --muted: 15 15% 20%;
-    --muted-foreground: 25 15% 60%;
+    --muted: 18 12% 20%;
+    --muted-foreground: 30 15% 60%;
 
-    --accent: 15 15% 22%;
-    --accent-foreground: 25 30% 92%;
+    --accent: 18 12% 22%;
+    --accent-foreground: 30 30% 92%;
 
     --destructive: 0 62% 35%;
-    --destructive-foreground: 25 30% 92%;
+    --destructive-foreground: 30 30% 92%;
 
-    --border: 15 15% 22%;
-    --input: 15 15% 22%;
-    --ring: 15 55% 68%;
+    --border: 18 12% 24%;
+    --input: 18 12% 24%;
+    --ring: 18 60% 62%;
+
+    --success: 145 55% 45%;
+    --warning: 35 90% 55%;
+    --danger: 0 70% 50%;
+    --info: 210 80% 60%;
+
+    --bg-glow-1: 18 60% 45%;
+    --bg-glow-2: 35 70% 45%;
   }
 }
 
@@ -82,5 +99,36 @@
 
   body {
     @apply bg-background text-foreground;
+    background-image:
+      radial-gradient(900px 320px at 8% -10%, hsl(var(--bg-glow-1) / 0.12), transparent),
+      radial-gradient(900px 320px at 92% -12%, hsl(var(--bg-glow-2) / 0.10), transparent);
+    font-feature-settings: "ss01" 1, "cv05" 1;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.18);
+  }
+}
+
+@layer components {
+  .portal-panel {
+    @apply rounded-2xl border border-border/70 bg-card/85 shadow-[0_18px_60px_-36px_rgba(75,42,19,0.4)] backdrop-blur;
+  }
+
+  .portal-panel-muted {
+    @apply rounded-2xl border border-border/70 bg-secondary/45;
+  }
+
+  .portal-chip {
+    @apply inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-primary;
+  }
+
+  .portal-metric {
+    @apply rounded-2xl border border-border/70 bg-background/80 px-3 py-3;
   }
 }

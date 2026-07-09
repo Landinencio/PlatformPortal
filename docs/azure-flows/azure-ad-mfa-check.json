@@ -1,0 +1,325 @@
+{
+  "name": "Azure AD: Usuarios sin grupo MFA",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -528,
+        144
+      ],
+      "id": "3ef85aeb-5c0f-4266-a0da-d0ecf885d70d"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "AZURE_TENANT_ID",
+              "value": "19e73cc9-78d1-4540-862c-5a89572ef80e"
+            },
+            {
+              "name": "AZURE_CLIENT_ID",
+              "value": "bbca2c99-4520-44a8-8108-cb00333e5792"
+            },
+            {
+              "name": "AZURE_CLIENT_SECRET",
+              "value": "REDACTED_AZURE_CLIENT_SECRET_ROTATE_ME"
+            },
+            {
+              "name": "GROUP_CON_MFA_ID",
+              "value": "26bc35ad-4cf1-4339-8815-954eab484e05"
+            },
+            {
+              "name": "GROUP_SIN_MFA_ID",
+              "value": "4081b043-c06b-409a-9411-a44a145c90ec"
+            },
+            {
+              "name": "EMAIL_TO",
+              "value": "inaki.riesco@iskaypet.com"
+            },
+            {
+              "name": "EMAIL_FROM",
+              "value": "n8n-azure@tooling.dp.iskaypet.com"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        -304,
+        144
+      ],
+      "id": "d2726076-9c44-4a50-8c86-94b5b1e3d299"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://login.microsoftonline.com/{{ $json.AZURE_TENANT_ID }}/oauth2/v2.0/token",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/x-www-form-urlencoded"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "client_id",
+              "value": "={{ $json.AZURE_CLIENT_ID }}"
+            },
+            {
+              "name": "client_secret",
+              "value": "={{ $json.AZURE_CLIENT_SECRET }}"
+            },
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            },
+            {
+              "name": "scope",
+              "value": "https://graph.microsoft.com/.default"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "name": "Get Azure Token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -80,
+        144
+      ],
+      "id": "21cf3a81-3bd2-46b8-ad71-c8e9637d114e"
+    },
+    {
+      "parameters": {
+        "jsCode": "const token = $json.access_token;\nconst conId = $('Config').first().json['GROUP_CON_MFA_ID'];\nconst sinId = $('Config').first().json['GROUP_SIN_MFA_ID'];\nlet script = `\nconst https = require('https');\nconst fs = require('fs');\n\nconst TOKEN = '__TOKEN__';\nconst GROUP_CON_ID = '__GROUP_CON_ID__';\nconst GROUP_SIN_ID = '__GROUP_SIN_ID__';\nconst OUTPUT = '/tmp/azure_mfa_report.json';\n\nfunction graphGet(url) {\n  return new Promise((resolve, reject) => {\n    https.get(url, { headers: { 'Authorization': 'Bearer ' + TOKEN } }, res => {\n      let d = '';\n      res.on('data', c => d += c);\n      res.on('end', () => {\n        try { resolve(JSON.parse(d)); }\n        catch(e) { reject(new Error('Parse error')); }\n      });\n    }).on('error', reject);\n  });\n}\n\nasync function paginate(url) {\n  const results = [];\n  while (url) {\n    const d = await graphGet(url);\n    if (d.error) { console.error('API Error:', d.error.message); break; }\n    results.push(...(d.value || []));\n    url = d['@odata.nextLink'] || null;\n    if (results.length % 500 === 0) console.log('  ...' + results.length);\n  }\n  return results;\n}\n\nasync function paginateIds(url) {\n  const ids = new Set();\n  while (url) {\n    const d = await graphGet(url);\n    if (d.error) { console.error('API Error:', d.error.message); break; }\n    (d.value || []).forEach(m => ids.add(m.id));\n    url = d['@odata.nextLink'] || null;\n  }\n  return ids;\n}\n\nasync function main() {\n  console.log('Fetching enabled users (beta, with signInActivity)...');\n  const users = await paginate(\n    'https://graph.microsoft.com/beta/users?$filter=accountEnabled%20eq%20true' +\n    '&$select=id,displayName,mail,userPrincipalName,userType,createdDateTime,department,jobTitle,companyName,signInActivity' +\n    '&$top=100'\n  );\n  console.log('Total enabled users: ' + users.length);\n\n  console.log('Fetching AZ_USERS_CON_MFA...');\n  const conIds = await paginateIds(\n    'https://graph.microsoft.com/v1.0/groups/' + GROUP_CON_ID + '/members?$select=id&$top=100'\n  );\n  console.log('  CON_MFA: ' + conIds.size);\n\n  console.log('Fetching AZ_USERS_SIN_MFA...');\n  const sinIds = await paginateIds(\n    'https://graph.microsoft.com/v1.0/groups/' + GROUP_SIN_ID + '/members?$select=id&$top=100'\n  );\n  console.log('  SIN_MFA: ' + sinIds.size);\n\n  const excluded = new Set([...conIds, ...sinIds]);\n  const filtered = users.filter(u => u.userType !== 'Guest' && !excluded.has(u.id));\n  console.log('Result: ' + filtered.length + ' users without MFA group');\n\n  const now = new Date();\n  const rows = filtered.map(u => {\n    const sia = u.signInActivity || {};\n    const lastI = sia.lastSignInDateTime || null;\n    const lastNI = sia.lastNonInteractiveSignInDateTime || null;\n    let latest = null;\n    if (lastI && lastNI) latest = new Date(lastI) > new Date(lastNI) ? lastI : lastNI;\n    else latest = lastI || lastNI;\n    let days = null;\n    if (latest) days = Math.floor((now - new Date(latest)) / 86400000);\n    return {\n      displayName: u.displayName || '',\n      mail: u.mail || '',\n      upn: u.userPrincipalName || '',\n      department: u.department || '',\n      jobTitle: u.jobTitle || '',\n      company: u.companyName || '',\n      created: (u.createdDateTime || '').substring(0, 10),\n      lastLogin: lastI || 'Nunca',\n      lastNonInteractive: lastNI || 'Nunca',\n      days: days !== null ? days : 'N/A'\n    };\n  });\n  rows.sort((a, b) => {\n    const da = a.days === 'N/A' ? 999999 : a.days;\n    const db = b.days === 'N/A' ? 999999 : b.days;\n    return db - da;\n  });\n\n  fs.writeFileSync(OUTPUT, JSON.stringify(rows));\n  const noLogin = rows.filter(r => r.lastLogin === 'Nunca').length;\n  const old90 = rows.filter(r => typeof r.days === 'number' && r.days > 90).length;\n  console.log('Stats: ' + noLogin + ' never logged in, ' + old90 + ' >90 days');\n  console.log('DONE: ' + rows.length + ' rows saved');\n}\nmain().catch(e => { console.error('FATAL:', e); process.exit(1); });\n`;\nscript = script.replace('__TOKEN__', token);\nscript = script.replace('__GROUP_CON_ID__', conId);\nscript = script.replace('__GROUP_SIN_ID__', sinId);\nconst b64 = Buffer.from(script).toString('base64');\nreturn [{ json: { scriptB64: b64 } }];"
+      },
+      "name": "Build Fetch Script",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        144,
+        144
+      ],
+      "id": "95243e30-fda6-4e1c-bcfb-235ef65b2a49"
+    },
+    {
+      "parameters": {
+        "command": "=echo '{{ $json.scriptB64 }}' | base64 -d | node"
+      },
+      "name": "Fetch & Filter Users",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        368,
+        144
+      ],
+      "id": "9860d6da-7c6a-466f-b9b8-23ccf9e58bff"
+    },
+    {
+      "parameters": {
+        "jsCode": "let script = `\nconst fs = require('fs');\nconst zlib = require('zlib');\n\nconst rows = JSON.parse(fs.readFileSync('/tmp/azure_mfa_report.json', 'utf8'));\nconsole.log('Building Excel for ' + rows.length + ' users...');\n\nfunction esc(s) {\n  if (s == null) return '';\n  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;');\n}\n\nconst hdrs = ['Nombre','Email','UPN','Departamento','Puesto','Empresa',\n  'Fecha creación','Último login interactivo','Último login no interactivo','Días sin login'];\n\nconst ssMap = new Map();\nconst ssList = [];\nfunction addSS(s) { const k = String(s); if (!ssMap.has(k)) { ssMap.set(k, ssList.length); ssList.push(k); } return ssMap.get(k); }\nhdrs.forEach(addSS);\nrows.forEach(r => {\n  [r.displayName, r.mail, r.upn, r.department, r.jobTitle, r.company,\n   r.created, r.lastLogin, r.lastNonInteractive, String(r.days)].forEach(addSS);\n});\n\nfunction col(c) { let s=''; while(c>=0){s=String.fromCharCode(65+(c%26))+s;c=Math.floor(c/26)-1;} return s; }\n\nlet sd = '';\nsd += '<row r=\"1\">';\nhdrs.forEach((h,i) => { sd += '<c r=\"'+col(i)+'1\" t=\"s\" s=\"1\"><v>'+addSS(h)+'</v></c>'; });\nsd += '</row>\\\\n';\nrows.forEach((r,ri) => {\n  const rn = ri+2;\n  const vals = [r.displayName,r.mail,r.upn,r.department,r.jobTitle,r.company,\n    r.created,r.lastLogin,r.lastNonInteractive,String(r.days)];\n  sd += '<row r=\"'+rn+'\">';\n  vals.forEach((v,ci) => {\n    let st = '0';\n    if (ci===9 && v!=='N/A' && parseInt(v)>90) st='2';\n    if (ci===9 && v==='N/A') st='2';\n    sd += '<c r=\"'+col(ci)+rn+'\" t=\"s\" s=\"'+st+'\"><v>'+addSS(v)+'</v></c>';\n  });\n  sd += '</row>\\\\n';\n});\n\nconst sheet = '<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\\\\n'+\n  '<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">\\\\n'+\n  '<cols><col min=\"1\" max=\"1\" width=\"35\" customWidth=\"1\"/><col min=\"2\" max=\"2\" width=\"35\" customWidth=\"1\"/>'+\n  '<col min=\"3\" max=\"3\" width=\"40\" customWidth=\"1\"/><col min=\"4\" max=\"4\" width=\"20\" customWidth=\"1\"/>'+\n  '<col min=\"5\" max=\"5\" width=\"25\" customWidth=\"1\"/><col min=\"6\" max=\"6\" width=\"15\" customWidth=\"1\"/>'+\n  '<col min=\"7\" max=\"7\" width=\"14\" customWidth=\"1\"/><col min=\"8\" max=\"8\" width=\"24\" customWidth=\"1\"/>'+\n  '<col min=\"9\" max=\"9\" width=\"24\" customWidth=\"1\"/><col min=\"10\" max=\"10\" width=\"14\" customWidth=\"1\"/></cols>\\\\n'+\n  '<sheetData>\\\\n'+sd+'</sheetData>\\\\n'+\n  '<autoFilter ref=\"A1:J'+(rows.length+1)+'\"/>\\\\n</worksheet>';\n\nconst ss = '<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\\\\n'+\n  '<sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" count=\"'+\n  (hdrs.length + rows.length*10)+'\" uniqueCount=\"'+ssList.length+'\">\\\\n'+\n  ssList.map(s=>'<si><t>'+esc(s)+'</t></si>').join('\\\\n')+'\\\\n</sst>';\n\nconst styles = '<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\\\\n'+\n  '<styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">\\\\n'+\n  '<fonts count=\"2\"><font><sz val=\"11\"/><name val=\"Calibri\"/></font>'+\n  '<font><b/><sz val=\"11\"/><color rgb=\"FFFFFFFF\"/><name val=\"Calibri\"/></font></fonts>\\\\n'+\n  '<fills count=\"4\"><fill><patternFill patternType=\"none\"/></fill>'+\n  '<fill><patternFill patternType=\"gray125\"/></fill>'+\n  '<fill><patternFill patternType=\"solid\"><fgColor rgb=\"FF2F5496\"/></patternFill></fill>'+\n  '<fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFFFC7CE\"/></patternFill></fill></fills>\\\\n'+\n  '<borders count=\"1\"><border><left/><right/><top/><bottom/><diagonal/></border></borders>\\\\n'+\n  '<cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/></cellStyleXfs>\\\\n'+\n  '<cellXfs count=\"3\">'+\n  '<xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/>'+\n  '<xf numFmtId=\"0\" fontId=\"1\" fillId=\"2\" borderId=\"0\" xfId=\"0\" applyFont=\"1\" applyFill=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" wrapText=\"1\"/></xf>'+\n  '<xf numFmtId=\"0\" fontId=\"0\" fillId=\"3\" borderId=\"0\" xfId=\"0\" applyFill=\"1\"><alignment horizontal=\"center\"/></xf>'+\n  '</cellXfs>\\\\n</styleSheet>';\n\nconst ct = '<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\\\\n'+\n  '<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">'+\n  '<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>'+\n  '<Default Extension=\"xml\" ContentType=\"application/xml\"/>'+\n  '<Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/>'+\n  '<Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>'+\n  '<Override PartName=\"/xl/sharedStrings.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml\"/>'+\n  '<Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/>'+\n  '</Types>';\n\nconst rels = '<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\\\\n'+\n  '<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">'+\n  '<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>';\n\nconst wbr = '<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\\\\n'+\n  '<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">'+\n  '<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/>'+\n  '<Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings\" Target=\"sharedStrings.xml\"/>'+\n  '<Relationship Id=\"rId3\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/></Relationships>';\n\nconst wb = '<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\\\\n'+\n  '<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">'+\n  '<sheets><sheet name=\"Usuarios sin grupo MFA\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>';\n\n// ===== Pure Node.js ZIP builder using zlib.deflateRawSync =====\nconst files = [\n  { name: '[Content_Types].xml', data: Buffer.from(ct, 'utf8') },\n  { name: '_rels/.rels', data: Buffer.from(rels, 'utf8') },\n  { name: 'xl/workbook.xml', data: Buffer.from(wb, 'utf8') },\n  { name: 'xl/_rels/workbook.xml.rels', data: Buffer.from(wbr, 'utf8') },\n  { name: 'xl/worksheets/sheet1.xml', data: Buffer.from(sheet, 'utf8') },\n  { name: 'xl/sharedStrings.xml', data: Buffer.from(ss, 'utf8') },\n  { name: 'xl/styles.xml', data: Buffer.from(styles, 'utf8') },\n];\n\nfunction crc32(buf) {\n  let table = crc32.table;\n  if (!table) {\n    table = new Uint32Array(256);\n    for (let i = 0; i < 256; i++) {\n      let c = i;\n      for (let j = 0; j < 8; j++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);\n      table[i] = c;\n    }\n    crc32.table = table;\n  }\n  let crc = 0xFFFFFFFF;\n  for (let i = 0; i < buf.length; i++) crc = table[(crc ^ buf[i]) & 0xFF] ^ (crc >>> 8);\n  return (crc ^ 0xFFFFFFFF) >>> 0;\n}\n\nfunction buildZip(entries) {\n  const localHeaders = [];\n  const centralHeaders = [];\n  let offset = 0;\n\n  for (const entry of entries) {\n    const nameB = Buffer.from(entry.name, 'utf8');\n    const raw = entry.data;\n    const compressed = zlib.deflateRawSync(raw);\n    const crc = crc32(raw);\n\n    // Local file header (30 + nameLen + compressedLen)\n    const lh = Buffer.alloc(30 + nameB.length);\n    lh.writeUInt32LE(0x04034b50, 0);   // signature\n    lh.writeUInt16LE(20, 4);            // version needed\n    lh.writeUInt16LE(0, 6);             // flags\n    lh.writeUInt16LE(8, 8);             // compression: deflate\n    lh.writeUInt16LE(0, 10);            // mod time\n    lh.writeUInt16LE(0, 12);            // mod date\n    lh.writeUInt32LE(crc, 14);          // crc32\n    lh.writeUInt32LE(compressed.length, 18); // compressed size\n    lh.writeUInt32LE(raw.length, 22);   // uncompressed size\n    lh.writeUInt16LE(nameB.length, 26); // filename length\n    lh.writeUInt16LE(0, 28);            // extra field length\n    nameB.copy(lh, 30);\n\n    localHeaders.push(Buffer.concat([lh, compressed]));\n\n    // Central directory header\n    const ch = Buffer.alloc(46 + nameB.length);\n    ch.writeUInt32LE(0x02014b50, 0);    // signature\n    ch.writeUInt16LE(20, 4);            // version made by\n    ch.writeUInt16LE(20, 6);            // version needed\n    ch.writeUInt16LE(0, 8);             // flags\n    ch.writeUInt16LE(8, 10);            // compression: deflate\n    ch.writeUInt16LE(0, 12);            // mod time\n    ch.writeUInt16LE(0, 14);            // mod date\n    ch.writeUInt32LE(crc, 16);          // crc32\n    ch.writeUInt32LE(compressed.length, 20); // compressed size\n    ch.writeUInt32LE(raw.length, 24);   // uncompressed size\n    ch.writeUInt16LE(nameB.length, 28); // filename length\n    ch.writeUInt16LE(0, 30);            // extra field length\n    ch.writeUInt16LE(0, 32);            // comment length\n    ch.writeUInt16LE(0, 34);            // disk number start\n    ch.writeUInt16LE(0, 36);            // internal attrs\n    ch.writeUInt32LE(0, 38);            // external attrs\n    ch.writeUInt32LE(offset, 42);       // local header offset\n    nameB.copy(ch, 46);\n\n    centralHeaders.push(ch);\n    offset += lh.length + compressed.length;\n  }\n\n  const centralDir = Buffer.concat(centralHeaders);\n  const centralDirOffset = offset;\n\n  // End of central directory\n  const eocd = Buffer.alloc(22);\n  eocd.writeUInt32LE(0x06054b50, 0);\n  eocd.writeUInt16LE(0, 4);\n  eocd.writeUInt16LE(0, 6);\n  eocd.writeUInt16LE(entries.length, 8);\n  eocd.writeUInt16LE(entries.length, 10);\n  eocd.writeUInt32LE(centralDir.length, 12);\n  eocd.writeUInt32LE(centralDirOffset, 16);\n  eocd.writeUInt16LE(0, 20);\n\n  return Buffer.concat([...localHeaders, centralDir, eocd]);\n}\n\nconst zipBuf = buildZip(files);\nconst out = '/tmp/usuarios_sin_mfa.xlsx';\nfs.writeFileSync(out, zipBuf);\nconst b64 = zipBuf.toString('base64');\nfs.writeFileSync('/tmp/xlsx_b64.txt', b64);\nconsole.log('Excel: ' + zipBuf.length + ' bytes, b64: ' + b64.length);\nconsole.log('DONE');\n`;\nconst b64 = Buffer.from(script).toString('base64');\nreturn [{ json: { scriptB64: b64 } }];"
+      },
+      "name": "Build Excel Script",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        592,
+        144
+      ],
+      "id": "27498fbd-f7e6-4703-84d9-976ae58d0e6c"
+    },
+    {
+      "parameters": {
+        "command": "=echo '{{ $json.scriptB64 }}' | base64 -d | node"
+      },
+      "name": "Generate Excel",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        816,
+        144
+      ],
+      "id": "9a75cddd-89db-475a-b105-c4865bb83062"
+    },
+    {
+      "parameters": {
+        "command": "cat /tmp/xlsx_b64.txt"
+      },
+      "name": "Read Excel B64",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        144
+      ],
+      "id": "618d1e8c-a1ec-4917-9d61-8a7f2e35dfcf"
+    },
+    {
+      "parameters": {
+        "jsCode": "const xlsxB64 = $json.stdout.trim();\nconst emailTo = $('Config').first().json['EMAIL_TO'];\nconst emailFrom = $('Config').first().json['EMAIL_FROM'];\nconst now = new Date().toISOString().substring(0, 10);\nconst po = $('Fetch & Filter Users').first().json.stdout || '';\nconst rc = (po.match(/Result: (\\d+) users/) || [])[1] || '?';\nconst nc = (po.match(/(\\d+) never logged/) || [])[1] || '?';\nconst oc = (po.match(/(\\d+) >90 days/) || [])[1] || '?';\nconst subject = 'Usuarios sin grupo MFA - Reporte ' + now;\nconst html = '<html><body style=\"font-family:Arial,sans-serif;font-size:14px;color:#333\">'\n  + '<h2 style=\"color:#2F5496\">Reporte de usuarios sin grupo MFA</h2>'\n  + '<p>Se adjunta el listado de usuarios habilitados en Azure AD que <b>no pertenecen</b> a:</p>'\n  + '<ul><li><b>AZ_USERS_CON_MFA</b></li><li><b>AZ_USERS_SIN_MFA</b></li></ul>'\n  + '<table style=\"border-collapse:collapse;margin:16px 0\">'\n  + '<tr><td style=\"padding:4px 12px;font-weight:bold\">Total usuarios:</td><td>' + rc + '</td></tr>'\n  + '<tr><td style=\"padding:4px 12px;font-weight:bold\">Sin login nunca:</td><td>' + nc + '</td></tr>'\n  + '<tr><td style=\"padding:4px 12px;font-weight:bold\">Último login &gt; 90 días:</td><td>' + oc + '</td></tr>'\n  + '</table>'\n  + '<p>Fecha: <b>' + now + '</b></p>'\n  + '<p style=\"font-size:12px;color:#999;margin-top:24px\">Generado automáticamente por n8n.</p>'\n  + '</body></html>';\nconst fileName = 'Usuarios_Sin_Grupo_MFA_' + now + '.xlsx';\nreturn [{\n  json: { subject, html, emailTo, emailFrom, fileName },\n  binary: {\n    attachment: {\n      data: xlsxB64,\n      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',\n      fileName: fileName\n    }\n  }\n}];"
+      },
+      "name": "Prepare Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1264,
+        144
+      ],
+      "id": "4023c21d-a1e8-4534-ad66-4992451101cc"
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $json.emailFrom }}",
+        "toEmail": "={{ $json.emailTo }}",
+        "subject": "={{ $json.subject }}",
+        "html": "={{ $json.html }}",
+        "options": {
+          "attachments": "attachment"
+        }
+      },
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1488,
+        144
+      ],
+      "id": "348fb386-7d1b-4f2f-a0f0-eb82d59e3801",
+      "webhookId": "deb8f420-2385-4bda-b495-d80623427e1a",
+      "credentials": {
+        "smtp": {
+          "id": "BnsgykToCoSaofzV",
+          "name": "SMTP account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Get Azure Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Azure Token": {
+      "main": [
+        [
+          {
+            "node": "Build Fetch Script",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Fetch Script": {
+      "main": [
+        [
+          {
+            "node": "Fetch & Filter Users",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch & Filter Users": {
+      "main": [
+        [
+          {
+            "node": "Build Excel Script",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Excel Script": {
+      "main": [
+        [
+          {
+            "node": "Generate Excel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Excel": {
+      "main": [
+        [
+          {
+            "node": "Read Excel B64",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Excel B64": {
+      "main": [
+        [
+          {
+            "node": "Prepare Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Email": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "4faee567-b99f-49d5-a58b-a75b703cd27f",
+  "meta": {
+    "instanceId": "c52849af140fecdfb0c6d81c4296e78a8cded6ecf6ac196569f43a8812b332a0"
+  },
+  "id": "64K8ukqtV6BTz7NG",
+  "tags": []
+}

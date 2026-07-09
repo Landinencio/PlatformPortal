@@ -1,0 +1,109 @@
+# Expose VerticalPodAutoscaler recommendations as Prometheus metrics via
+# kube-state-metrics CustomResourceState (CRS). This is the supported path
+# for KSM v2.17 (which does not include `verticalpodautoscalers` as a built-in
+# collector — that was reverted upstream and only available via CRS).
+#
+# Output metrics:
+#   verticalpodautoscaler_recommendation_cpu_target_cores
+#   verticalpodautoscaler_recommendation_cpu_lowerbound_cores
+#   verticalpodautoscaler_recommendation_cpu_upperbound_cores
+#   verticalpodautoscaler_recommendation_memory_target_bytes
+#   verticalpodautoscaler_recommendation_memory_lowerbound_bytes
+#   verticalpodautoscaler_recommendation_memory_upperbound_bytes
+#
+# Each carries labels: namespace, verticalpodautoscaler, target_api_version,
+# target_kind, target_name, container, k8s_cluster_name (added by Alloy).
+#
+# Companion file: ops/k8s/ksm-vpa-rbac.yaml — extra ClusterRole granting
+# list/watch on autoscaling.k8s.io/verticalpodautoscalers.
+#
+# Apply with:
+#   helm upgrade grafana-k8s-monitoring grafana/k8s-monitoring \
+#     --version 3.8.5 -n cloud-agent --reuse-values \
+#     -f ops/k8s/ksm-vpa-values.yaml
+#
+# Verify in Grafana Cloud after ~1-2 min:
+#   count by (k8s_cluster_name) (verticalpodautoscaler_recommendation_memory_target_bytes)
+kube-state-metrics:
+  customResourceState:
+    enabled: true
+    create: true
+    name: ksm-customresourcestate-config
+    key: config.yaml
+    config:
+      kind: CustomResourceStateMetrics
+      spec:
+        resources:
+          - groupVersionKind:
+              group: autoscaling.k8s.io
+              version: v1
+              kind: VerticalPodAutoscaler
+            labelsFromPath:
+              namespace: [metadata, namespace]
+              verticalpodautoscaler: [metadata, name]
+              target_api_version: [spec, targetRef, apiVersion]
+              target_kind: [spec, targetRef, kind]
+              target_name: [spec, targetRef, name]
+            metrics:
+              - name: "verticalpodautoscaler_recommendation_cpu_target_cores"
+                help: "VPA recommended CPU target in cores"
+                each:
+                  type: Gauge
+                  gauge:
+                    path: [status, recommendation, containerRecommendations]
+                    valueFrom: [target, cpu]
+                    labelsFromPath:
+                      container: [containerName]
+              - name: "verticalpodautoscaler_recommendation_cpu_lowerbound_cores"
+                help: "VPA recommended CPU lowerBound in cores"
+                each:
+                  type: Gauge
+                  gauge:
+                    path: [status, recommendation, containerRecommendations]
+                    valueFrom: [lowerBound, cpu]
+                    labelsFromPath:
+                      container: [containerName]
+              - name: "verticalpodautoscaler_recommendation_cpu_upperbound_cores"
+                help: "VPA recommended CPU upperBound in cores"
+                each:
+                  type: Gauge
+                  gauge:
+                    path: [status, recommendation, containerRecommendations]
+                    valueFrom: [upperBound, cpu]
+                    labelsFromPath:
+                      container: [containerName]
+              - name: "verticalpodautoscaler_recommendation_memory_target_bytes"
+                help: "VPA recommended memory target in bytes"
+                each:
+                  type: Gauge
+                  gauge:
+                    path: [status, recommendation, containerRecommendations]
+                    valueFrom: [target, memory]
+                    labelsFromPath:
+                      container: [containerName]
+              - name: "verticalpodautoscaler_recommendation_memory_lowerbound_bytes"
+                help: "VPA recommended memory lowerBound in bytes"
+                each:
+                  type: Gauge
+                  gauge:
+                    path: [status, recommendation, containerRecommendations]
+                    valueFrom: [lowerBound, memory]
+                    labelsFromPath:
+                      container: [containerName]
+              - name: "verticalpodautoscaler_recommendation_memory_upperbound_bytes"
+                help: "VPA recommended memory upperBound in bytes"
+                each:
+                  type: Gauge
+                  gauge:
+                    path: [status, recommendation, containerRecommendations]
+                    valueFrom: [upperBound, memory]
+                    labelsFromPath:
+                      container: [containerName]
+              - name: "verticalpodautoscaler_spec_updatemode"
+                help: "VPA update mode (1 if matches the value label)"
+                each:
+                  type: StateSet
+                  stateSet:
+                    labelName: update_mode
+                    path: [spec, updatePolicy, updateMode]
+                    list: ["Off", "Initial", "Recreate", "Auto"]

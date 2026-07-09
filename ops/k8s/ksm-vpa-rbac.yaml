@@ -1,0 +1,34 @@
+# Extra ClusterRole + binding to grant kube-state-metrics permission to read VPAs.
+# The grafana-k8s-monitoring 3.8.5 chart's nested kube-state-metrics 6.4.2 sub-chart
+# does NOT honor `extraRules`, so we patch RBAC ourselves. KSM reads from the
+# ServiceAccount `grafana-k8s-monitoring-kube-state-metrics` in `cloud-agent`.
+#
+# Apply per cluster:
+#   kubectl --context <ctx> apply -f ops/k8s/ksm-vpa-rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: grafana-k8s-monitoring-kube-state-metrics-vpa
+  labels:
+    app.kubernetes.io/name: kube-state-metrics
+    app.kubernetes.io/component: rbac-extension
+rules:
+  - apiGroups: ["autoscaling.k8s.io"]
+    resources: ["verticalpodautoscalers"]
+    verbs: ["list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: grafana-k8s-monitoring-kube-state-metrics-vpa
+  labels:
+    app.kubernetes.io/name: kube-state-metrics
+    app.kubernetes.io/component: rbac-extension
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: grafana-k8s-monitoring-kube-state-metrics-vpa
+subjects:
+  - kind: ServiceAccount
+    name: grafana-k8s-monitoring-kube-state-metrics
+    namespace: cloud-agent

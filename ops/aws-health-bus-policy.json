@@ -1,0 +1,18 @@
+{
+  "_comment": "Resource (bus) policy for the central EventBridge bus `portal-aws-health` in dp-tooling (444455556666, eu-west-1). Allows ANY principal that belongs to the IskayPet AWS Organization (o-8u43vqg0jh) to PutEvents into the bus. Using aws:PrincipalOrgID avoids enumerating the 22 account IDs and auto-covers future accounts. Applied with: aws events put-permission --event-bus-name portal-aws-health --policy file://ops/aws-health-bus-policy.json (the --policy form REPLACES the whole policy, so it is idempotent).",
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowOrgAccountsPutEvents",
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": "events:PutEvents",
+      "Resource": "arn:aws:events:eu-west-1:444455556666:event-bus/portal-aws-health",
+      "Condition": {
+        "StringEquals": {
+          "aws:PrincipalOrgID": "o-8u43vqg0jh"
+        }
+      }
+    }
+  ]
+}

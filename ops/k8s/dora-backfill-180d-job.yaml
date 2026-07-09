@@ -1,0 +1,175 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dora-backfill-180d
+  namespace: n8n
+  labels:
+    app: dora-backfill
+    backfill-range: 180d
+spec:
+  # No reintentar si falla - mejor revisar manualmente
+  backoffLimit: 0
+  # Timeout de 48 horas (180 días * 10 min/día = 30 horas estimadas)
+  activeDeadlineSeconds: 172800
+  template:
+    metadata:
+      labels:
+        app: dora-backfill
+    spec:
+      restartPolicy: Never
+      serviceAccountName: default
+      containers:
+      - name: backfill
+        image: curlimages/curl:latest
+        imagePullPolicy: Always
+        env:
+        - name: TZ
+          value: Europe/Madrid
+        - name: BACKFILL_START_DATE
+          value: "2025-09-15"  # 180 días atrás desde 2026-03-13
+        - name: BACKFILL_END_DATE
+          value: "2026-03-12"  # Hasta ayer
+        - name: DELAY_BETWEEN_DAYS
+          value: "600"  # 10 minutos entre días
+        - name: API_URL
+          value: "http://n8n-webhooks.n8n.svc.cluster.local:3000"
+        - name: INTERNAL_API_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: INTERNAL_API_SECRET
+              name: platformportal-secrets
+        command:
+        - /bin/sh
+        - -c
+        - |
+          set -e
+          
+          echo "=========================================="
+          echo "DORA Metrics Backfill - 180 días"
+          echo "=========================================="
+          echo "Start date: $BACKFILL_START_DATE"
+          echo "End date: $BACKFILL_END_DATE"
+          echo "Delay between days: ${DELAY_BETWEEN_DAYS}s"
+          echo "API URL: $API_URL"
+          echo "Started at: $(date)"
+          echo "=========================================="
+          echo ""
+          
+          # Contadores
+          SUCCESS_COUNT=0
+          FAIL_COUNT=0
+          day_num=1
+          
+          # Generar lista de fechas usando un loop simple
+          current_year=2025
+          current_month=9
+          current_day=15
+          
+          # Función para procesar un día
+          process_day() {
+            local date_str="$1"
+            local day_num="$2"
+            
+            echo "----------------------------------------"
+            echo "[$day_num/179] Processing $date_str..."
+            echo "Time: $(date)"
+            
+            # Llamar al endpoint de snapshot con timeout de 20 minutos
+            http_code=$(curl -X POST \
+              -H "Content-Type: application/json" \
+              -H "x-internal-secret: ${INTERNAL_API_SECRET}" \
+              -w "%{http_code}" \
+              -s -o /tmp/response.json \
+              --max-time 1200 \
+              "${API_URL}/api/metrics/snapshot?date=${date_str}")
+            
+            # Evaluar resultado
+            if [ "$http_code" = "200" ] || [ "$http_code" = "207" ]; then
+              echo "✓ SUCCESS: HTTP $http_code"
+              SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+            else
+              echo "✗ FAILED: HTTP $http_code"
+              FAIL_COUNT=$((FAIL_COUNT + 1))
+            fi
+            
+            # Progreso
+            progress=$((day_num * 100 / 179))
+            echo "Progress: $progress% ($day_num/179 days)"
+            echo "Stats: ✓$SUCCESS_COUNT ✗$FAIL_COUNT"
+            
+            # Delay entre días
+            if [ $day_num -lt 179 ]; then
+              echo "Waiting ${DELAY_BETWEEN_DAYS}s..."
+              sleep "$DELAY_BETWEEN_DAYS"
+            fi
+            
+            echo ""
+          }
+          
+          # Procesar septiembre 2025 (15-30)
+          for day in $(seq 15 30); do
+            process_day "2025-09-$(printf %02d $day)" "$day_num"
+            day_num=$((day_num + 1))
+          done
+          
+          # Procesar octubre 2025 (1-31)
+          for day in $(seq 1 31); do
+            process_day "2025-10-$(printf %02d $day)" "$day_num"
+            day_num=$((day_num + 1))
+          done
+          
+          # Procesar noviembre 2025 (1-30)
+          for day in $(seq 1 30); do
+            process_day "2025-11-$(printf %02d $day)" "$day_num"
+            day_num=$((day_num + 1))
+          done
+          
+          # Procesar diciembre 2025 (1-31)
+          for day in $(seq 1 31); do
+            process_day "2025-12-$(printf %02d $day)" "$day_num"
+            day_num=$((day_num + 1))
+          done
+          
+          # Procesar enero 2026 (1-31)
+          for day in $(seq 1 31); do
+            process_day "2026-01-$(printf %02d $day)" "$day_num"
+            day_num=$((day_num + 1))
+          done
+          
+          # Procesar febrero 2026 (1-28)
+          for day in $(seq 1 28); do
+            process_day "2026-02-$(printf %02d $day)" "$day_num"
+            day_num=$((day_num + 1))
+          done
+          
+          # Procesar marzo 2026 (1-12)
+          for day in $(seq 1 12); do
+            process_day "2026-03-$(printf %02d $day)" "$day_num"
+            day_num=$((day_num + 1))
+          done
+          
+          echo "=========================================="
+          echo "BACKFILL COMPLETED"
+          echo "=========================================="
+          echo "Finished at: $(date)"
+          echo "Total days processed: 179"
+          echo "Successful: $SUCCESS_COUNT"
+          echo "Failed: $FAIL_COUNT"
+          echo "Success rate: $((SUCCESS_COUNT * 100 / 179))%"
+          echo "=========================================="
+          
+          # Exit con error si hubo muchos fallos
+          if [ "$FAIL_COUNT" -gt 17 ]; then
+            echo "ERROR: Too many failures ($FAIL_COUNT > 10%)"
+            exit 1
+          fi
+          
+          echo "Backfill completed successfully!"
+          exit 0
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"

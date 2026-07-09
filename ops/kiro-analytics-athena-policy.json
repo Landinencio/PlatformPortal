@@ -1,0 +1,64 @@
+{
+  "_comment": "Inline policy `KiroAnalyticsAthenaRead` attached to the portal IRSA role `portal-inventory-irsa` (arn:aws:iam::444455556666:role/portal-inventory-irsa). Grants read access to the Kiro Analytics Athena dataset in eu-central-1 (same tooling account 444455556666): run queries on the `kiro-analytics` workgroup, read the `kiro_analytics` Glue database/tables, read the source data buckets (test-kiro-logs, kiro-classified-data) and read/write the Athena results bucket. Consumed by src/lib/kiro-analytics.ts (ambient IRSA creds, no AssumeRole). Applied with: aws iam put-role-policy --role-name portal-inventory-irsa --policy-name KiroAnalyticsAthenaRead --policy-document file://ops/kiro-analytics-athena-policy.json (put-role-policy overwrites -> idempotent).",
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "KiroAthenaWorkgroup",
+      "Effect": "Allow",
+      "Action": [
+        "athena:StartQueryExecution",
+        "athena:GetQueryExecution",
+        "athena:GetQueryResults",
+        "athena:StopQueryExecution",
+        "athena:GetWorkGroup"
+      ],
+      "Resource": "arn:aws:athena:eu-central-1:444455556666:workgroup/kiro-analytics"
+    },
+    {
+      "Sid": "KiroGlueCatalog",
+      "Effect": "Allow",
+      "Action": [
+        "glue:GetDatabase",
+        "glue:GetDatabases",
+        "glue:GetTable",
+        "glue:GetTables",
+        "glue:GetPartition",
+        "glue:GetPartitions"
+      ],
+      "Resource": [
+        "arn:aws:glue:eu-central-1:444455556666:catalog",
+        "arn:aws:glue:eu-central-1:444455556666:database/kiro_analytics",
+        "arn:aws:glue:eu-central-1:444455556666:table/kiro_analytics/*"
+      ]
+    },
+    {
+      "Sid": "KiroSourceDataRead",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:GetBucketLocation",
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::test-kiro-logs",
+        "arn:aws:s3:::test-kiro-logs/*",
+        "arn:aws:s3:::kiro-classified-data-444455556666-eu-central-1",
+        "arn:aws:s3:::kiro-classified-data-444455556666-eu-central-1/*"
+      ]
+    },
+    {
+      "Sid": "KiroAthenaResultsReadWrite",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:GetBucketLocation",
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::kiro-athena-results-444455556666-eu-central-1",
+        "arn:aws:s3:::kiro-athena-results-444455556666-eu-central-1/*"
+      ]
+    }
+  ]
+}

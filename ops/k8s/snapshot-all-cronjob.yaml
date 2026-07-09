@@ -1,0 +1,62 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: dora-metrics-snapshot
+  namespace: n8n
+spec:
+  # Run every day at 2:00 AM (Europe/Madrid timezone)
+  schedule: "0 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: dora-snapshot
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: default
+          containers:
+          - name: snapshot
+            image: curlimages/curl:latest
+            imagePullPolicy: Always
+            env:
+            - name: TZ
+              value: Europe/Madrid
+            - name: INTERNAL_API_SECRET
+              valueFrom:
+                secretKeyRef:
+                  key: INTERNAL_API_SECRET
+                  name: platformportal-secrets
+            command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Starting unified metrics snapshot..."
+              echo "Date: $(date)"
+              
+              # Call the unified snapshot API (internal service)
+              # Timeout set to 33 minutes (2000s) to allow DORA snapshot to complete
+              STATUS=$(curl -X POST \
+                -H "Content-Type: application/json" \
+                -H "x-internal-secret: ${INTERNAL_API_SECRET}" \
+                -w "%{http_code}" \
+                -s -o /tmp/response.json \
+                --max-time 2000 \
+                http://n8n-webhooks.n8n.svc.cluster.local:3000/api/metrics/snapshot-all)
+              
+              echo ""
+              echo "HTTP Status: $STATUS"
+              echo "Response:"
+              cat /tmp/response.json
+              echo ""
+              
+              if [ "$STATUS" != "200" ] && [ "$STATUS" != "207" ]; then
+                echo "ERROR: Snapshot failed with status $STATUS"
+                exit 1
+              fi
+              
+              echo "Snapshot completed successfully!"
+              echo "Finished at: $(date)"

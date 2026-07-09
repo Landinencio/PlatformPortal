@@ -8,8 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
-import Link from "next/link"
-import { Check, Shield, Server, Box, Cloud, Activity, ArrowLeft } from "lucide-react"
+import { Check, Shield, Server, Box, Cloud, Activity } from "lucide-react"
 
 // Types
 type AppType = "argocd" | "sonarqube" | "grafana" | "platform" | "aws"
@@ -120,17 +119,9 @@ export default function UserOnboardingPage() {
     ] as const
 
     return (
-        <main className="min-h-screen bg-slate-50 p-8 md:p-24 flex justify-center">
+        <main className="min-h-screen p-8 md:p-24 flex justify-center">
             <Card className="w-full max-w-3xl">
                 <CardHeader>
-                    <div className="mb-4">
-                        <Link href="/">
-                            <Button variant="ghost" size="sm" className="gap-2 pl-0 hover:pl-2 transition-all">
-                                <ArrowLeft className="w-4 h-4" />
-                                Back to Menu
-                            </Button>
-                        </Link>
-                    </div>
                     <CardTitle className="text-2xl flex items-center gap-2">
                         <Shield className="w-6 h-6 text-primary" />
                         Request Access
@@ -147,7 +138,7 @@ export default function UserOnboardingPage() {
                         <Input
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            placeholder="user@company.com"
+                            placeholder="user@iskaypet.com"
                             className="bg-background"
                         />
                     </div>
@@ -206,11 +197,11 @@ export default function UserOnboardingPage() {
                     {/* Submit Action */}
                     <div className="pt-4">
                         {success ? (
-                            <div className="p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-3 text-green-800 animate-in zoom-in">
+                            <div className="p-4 bg-success/10 border border-success/30 rounded-lg flex items-center gap-3 text-foreground animate-in zoom-in">
                                 <Check className="w-5 h-5" />
                                 <div>
                                     <p className="font-semibold">Request Submitted!</p>
-                                    <p className="text-sm text-green-700">You have been added to the group successfully.</p>
+                                    <p className="text-sm text-muted-foreground">You have been added to the group successfully.</p>
                                 </div>
                                 <Button variant="outline" size="sm" className="ml-auto" onClick={() => { setSuccess(false); setSelectedApp(null); }}>
                                     New Request
@@ -228,7 +219,7 @@ export default function UserOnboardingPage() {
                         )}
 
                         {error && (
-                            <p className="text-sm text-red-600 mt-2 text-center">{error}</p>
+                            <p className="text-sm text-danger mt-2 text-center">{error}</p>
                         )}
                     </div>
 

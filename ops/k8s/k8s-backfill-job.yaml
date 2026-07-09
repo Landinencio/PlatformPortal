@@ -1,0 +1,63 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: k8s-backfill-apr8-20
+  namespace: n8n
+  labels:
+    app: k8s-snapshot
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 7200  # 2h max
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: k8s-snapshot
+    spec:
+      restartPolicy: Never
+      serviceAccountName: n8n-webhooks
+      imagePullSecrets:
+        - name: harbor-registry
+      containers:
+        - name: backfill
+          image: alpine:3.19
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c"]
+          args:
+            - |
+              apk add --no-cache coreutils wget
+              PORTAL_URL="http://n8n-webhooks.n8n.svc.cluster.local:3000"
+              SECRET="$INTERNAL_API_SECRET"
+              echo "=== K8s Metrics Backfill: 2026-04-08 to 2026-04-20 ==="
+              current="2026-04-08"
+              end="2026-04-21"
+              ok=0; fail=0; total=0
+              while [ "$(date -d "$current" +%s)" -lt "$(date -d "$end" +%s)" ]; do
+                total=$((total + 1))
+                echo -n "[$total] $current ... "
+                response=$(wget -qO- --timeout=300 \
+                  --header="x-internal-secret: $SECRET" \
+                  --header="Content-Type: application/json" \
+                  --post-data="" \
+                  "$PORTAL_URL/api/metrics/k8s-snapshot?date=$current" 2>&1 || echo "WGET_ERROR")
+                if echo "$response" | grep -q '"success":true'; then
+                  ok=$((ok + 1)); echo "OK"
+                else
+                  fail=$((fail + 1)); echo "FAIL: $(echo "$response" | head -c 80)"
+                fi
+                current=$(date -d "$current + 1 day" +%Y-%m-%d)
+              done
+              echo "=== Done: $ok OK, $fail failed of $total days ==="
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          env:
+            - name: INTERNAL_API_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: platformportal-secrets
+                  key: INTERNAL_API_SECRET

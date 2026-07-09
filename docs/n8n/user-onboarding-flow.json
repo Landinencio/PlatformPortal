@@ -1,0 +1,275 @@
+{
+  "name": "Azure AD: Add User to Group (Webhook + Jira + Teams)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "user-onboarding",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        880,
+        -112
+      ],
+      "id": "acbc7d41-4450-4ef7-a0c3-6e1199a7a5d7",
+      "webhookId": "cec83d0f-d59b-490d-8eda-95350d1c198d"
+    },
+    {
+      "parameters": {
+        "project": {
+          "__rl": true,
+          "value": "10142",
+          "mode": "id"
+        },
+        "issueType": {
+          "__rl": true,
+          "mode": "id",
+          "value": "10048"
+        },
+        "summary": "=[Access] Solicitud de acceso a {{ $json.body.app_name.toUpperCase() }} para {{ $json.body.user_email }}",
+        "additionalFields": {
+          "labels": [
+            "AccessRequest"
+          ]
+        }
+      },
+      "name": "Jira Create",
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        1104,
+        -112
+      ],
+      "id": "582f309e-9e7f-49a0-8f01-7a7c156d95e2",
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "CgputYowbXNdNhol",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://login.microsoftonline.com/19e73cc9-78d1-4540-862c-5a89572ef80e/oauth2/v2.0/token",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/x-www-form-urlencoded"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "client_id",
+              "value": "bbca2c99-4520-44a8-8108-cb00333e5792"
+            },
+            {
+              "name": "client_secret",
+              "value": "REDACTED_AZURE_CLIENT_SECRET_ROTATE_ME"
+            },
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            },
+            {
+              "name": "scope",
+              "value": "https://graph.microsoft.com/.default"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Get Azure Token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        1328,
+        -112
+      ],
+      "id": "8c0f4f73-a54d-4f4c-885f-d25e3f11fcc0"
+    },
+    {
+      "parameters": {
+        "url": "={{ 'https://graph.microsoft.com/v1.0/users/' + $node[\"Webhook\"].json[\"body\"][\"user_email\"] }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $json[\"access_token\"] }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Find User ID",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        1552,
+        -112
+      ],
+      "id": "d930addb-227d-4acb-a405-ec176f3e626f"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://graph.microsoft.com/v1.0/groups/' + $node[\"Webhook\"].json[\"body\"][\"target_group_id\"] + '/members/$ref' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $node[\"Get Azure Token\"].json[\"access_token\"] }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ '{\"@odata.id\": \"https://graph.microsoft.com/v1.0/directoryObjects/' + $json[\"id\"] + '\"}' }}",
+        "options": {}
+      },
+      "name": "Add to Group",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        1760,
+        -112
+      ],
+      "id": "ad8c60cb-87ee-43a6-b8b6-046185c3bbb9"
+    },
+    {
+      "parameters": {
+        "jsCode": "const app = $node[\"Webhook\"].json.body.app_name.toUpperCase();\nconst group = $node[\"Webhook\"].json.body.group_name;\nconst user = $node[\"Webhook\"].json.body.user_email;\nconst ticket = $node[\"Jira Create\"].json.key;\nconst ticketUrl = `https://iskaypet.atlassian.net/browse/${ticket}`;\n\nconst card = {\n  type: 'message',\n  attachments: [\n    {\n      contentType: 'application/vnd.microsoft.card.adaptive',\n      content: {\n        $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',\n        type: 'AdaptiveCard',\n        version: '1.4',\n        msteams: {\n          width: 'Full'\n        },\n        body: [\n          {\n            type: 'Container',\n            items: [\n              {\n                type: 'TextBlock',\n                text: '🔐 Solicitud de Acceso',\n                weight: 'Bolder',\n                size: 'Medium',\n                color: 'Accent'\n              },\n              {\n                type: 'TextBlock',\n                text: `${app}`,\n                weight: 'Bolder',\n                size: 'ExtraLarge',\n                spacing: 'None'\n              },\n              {\n                type: 'FactSet',\n                facts: [\n                  { title: 'Solicitante:', value: user },\n                  { title: 'Grupo Asignado:', value: group },\n                  { title: 'Estado:', value: '✅ Acceso Concedido' },\n                  { title: 'Jira:', value: `[${ticket}](${ticketUrl})` }\n                ]\n              }\n            ]\n          }\n        ],\n        actions: [\n          {\n            type: 'Action.OpenUrl',\n            title: 'Ver Ticket en Jira',\n            url: ticketUrl\n          }\n        ]\n      }\n    }\n  ]\n};\n\nreturn [\n  {\n    json: {\n      teamsBody: card\n    }\n  }\n];"
+      },
+      "name": "Prepare Teams Card",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1984,
+        -112
+      ],
+      "id": "19002c8d-e0f1-440e-9809-6abad031475b"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://tiendanimalcom.webhook.office.com/webhookb2/8e93475d-c109-47e0-9493-a63a504e4a7d@19e73cc9-78d1-4540-862c-5a89572ef80e/IncomingWebhook/05bd0c8b06fb4464b0492ae7837f90d0/c9014ec0-0431-4f0a-a4f9-9eaf29abcc81/V2SidVcnWOSxXHg0auYtM_EbxOVyTWHyenGrSwonNRJrs1",
+        "sendHeaders": true,
+        "specifyHeaders": "json",
+        "jsonHeaders": "{\n  \"Content-Type\": \"application/json\"\n}\n",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.teamsBody) }}\n",
+        "options": {}
+      },
+      "name": "Send Teams Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2208,
+        -112
+      ],
+      "id": "c68db929-4651-4bb9-99e2-72575466854b"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Jira Create",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Jira Create": {
+      "main": [
+        [
+          {
+            "node": "Get Azure Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Azure Token": {
+      "main": [
+        [
+          {
+            "node": "Find User ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find User ID": {
+      "main": [
+        [
+          {
+            "node": "Add to Group",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add to Group": {
+      "main": [
+        [
+          {
+            "node": "Prepare Teams Card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Teams Card": {
+      "main": [
+        [
+          {
+            "node": "Send Teams Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Teams Notification": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "f91b08a7-7fad-4730-b7ee-6726b5d995e9",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "c52849af140fecdfb0c6d81c4296e78a8cded6ecf6ac196569f43a8812b332a0"
+  },
+  "id": "WuDy66ATOmLFWrii",
+  "tags": []
+}

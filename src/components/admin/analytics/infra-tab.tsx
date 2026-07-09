@@ -1,0 +1,159 @@
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  ResponsiveContainer,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  CartesianGrid,
+} from "recharts";
+import { Cloud, Percent, Clock } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { KpiCard } from "@/components/admin/analytics/kpi-card";
+import { AnalyticsSkeleton } from "@/components/admin/analytics/analytics-skeleton";
+import { ErrorCard } from "@/components/admin/analytics/error-card";
+import type { TrendData } from "@/lib/admin-analytics";
+
+interface Props {
+  days: number;
+  refreshKey: number;
+}
+
+export function InfraTab({ days, refreshKey }: Props) {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setError(false);
+    try {
+      const res = await fetch(`/api/admin/analytics/infra?days=${days}`);
+      if (!res.ok) throw new Error();
+      const json = await res.json();
+      setData(json.data);
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [days, refreshKey]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  if (loading) return <AnalyticsSkeleton />;
+  if (error || !data) return <ErrorCard onRetry={fetchData} />;
+
+  return (
+    <div className="space-y-6">
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <KpiCard
+          label="Total solicitudes"
+          value={data.kpis.totalRequests}
+          icon={Cloud}
+          trend={data.trends?.totalRequests ?? null}
+        />
+        <KpiCard
+          label="Tasa aprobación"
+          value={`${data.kpis.approvalRate}%`}
+          icon={Percent}
+          trend={data.trends?.approvalRate ?? null}
+        />
+        <KpiCard
+          label="Pendientes"
+          value={data.kpis.pendingCount}
+          icon={Clock}
+          trend={data.trends?.pendingCount ?? null}
+        />
+        <KpiCard
+          label="Tiempo medio"
+          value={`${data.kpis.avgTimeToReview}h`}
+          icon={Clock}
+          trend={data.trends?.avgTimeToReview ?? null}
+        />
+      </div>
+
+      {/* By Resource Type Bar Chart */}
+      <Card className="p-4">
+        <h3 className="text-sm font-medium mb-3">Por tipo de recurso</h3>
+        <ResponsiveContainer width="100%" height={300}>
+          <BarChart data={data.byResourceType}>
+            <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+            <XAxis dataKey="type" tick={{ fontSize: 11 }} />
+            <YAxis tick={{ fontSize: 11 }} />
+            <Tooltip />
+            <Bar dataKey="count" name="Solicitudes" fill="#6366f1" radius={[2, 2, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </Card>
+
+      {/* Daily Volume Line Chart */}
+      <Card className="p-4">
+        <h3 className="text-sm font-medium mb-3">Volumen diario</h3>
+        <ResponsiveContainer width="100%" height={300}>
+          <LineChart data={data.dailyVolume}>
+            <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+            <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+            <YAxis tick={{ fontSize: 11 }} />
+            <Tooltip />
+            <Legend />
+            <Line
+              type="monotone"
+              dataKey="count"
+              name="Solicitudes"
+              stroke="#10b981"
+              strokeWidth={2}
+              dot={false}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </Card>
+
+      {/* By Team Bar Chart */}
+      <Card className="p-4">
+        <h3 className="text-sm font-medium mb-3">Por equipo</h3>
+        <ResponsiveContainer width="100%" height={300}>
+          <BarChart data={data.byTeam}>
+            <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+            <XAxis dataKey="team" tick={{ fontSize: 11 }} />
+            <YAxis tick={{ fontSize: 11 }} />
+            <Tooltip />
+            <Bar dataKey="count" name="Solicitudes" fill="#8b5cf6" radius={[2, 2, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </Card>
+
+      {/* Top Requestors Table */}
+      <Card className="p-4">
+        <h3 className="text-sm font-medium mb-3">Top solicitantes</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b text-left text-muted-foreground">
+                <th className="pb-2 font-medium">Nombre</th>
+                <th className="pb-2 font-medium text-right">Solicitudes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.topRequestors?.map((row: any, idx: number) => (
+                <tr key={idx} className="border-b last:border-0">
+                  <td className="py-2 truncate max-w-[200px]">{row.name || row.email}</td>
+                  <td className="py-2 text-right font-medium">{row.count}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
+  );
+}

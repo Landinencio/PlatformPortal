@@ -1,39 +1,36 @@
-import { InfraRequestForm } from "@/components/infra-request-form"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import Link from "next/link"
-import { ArrowLeft } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { getServerSession } from "next-auth"
+import { redirect } from "next/navigation"
+import { authOptions } from "@/lib/auth"
+import { repoCatalog } from "@/lib/repo-catalog"
+import pool from "@/lib/db"
+import { InfraPageClient } from "@/components/infra-request-v2/infra-page-client"
 
-export default function CreateInfraPage() {
-    return (
-        <main className="min-h-screen bg-slate-50 flex flex-col items-center p-8">
-            <div className="w-full max-w-2xl space-y-6">
-                <Link href="/">
-                    <Button variant="ghost" className="pl-0 hover:bg-transparent hover:text-primary mb-6">
-                        <ArrowLeft className="mr-2 h-4 w-4" />
-                        Back to Dashboard
-                    </Button>
-                </Link>
+export default async function CreateInfraPage() {
+  const session = await getServerSession(authOptions)
 
-                <div className="text-center space-y-2 mb-8">
-                    <h1 className="text-3xl font-bold tracking-tight text-foreground">Request Infrastructure</h1>
-                    <p className="text-muted-foreground">
-                        Provision cloud resources via Terraform automation.
-                    </p>
-                </div>
+  if (!session) {
+    redirect("/")
+  }
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Resource Details</CardTitle>
-                        <CardDescription>
-                            Your request will be processed automatically via GitOps.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <InfraRequestForm />
-                    </CardContent>
-                </Card>
-            </div>
-        </main>
+  const allEntries = await repoCatalog.getAll()
+  const teams = [...new Set(allEntries.filter((e) => e.active).map((e) => e.team))]
+
+  // Fetch user's 5 most recent infra requests
+  const userEmail = session.user?.email?.toLowerCase() || ""
+  let recentRequests: { id: number; resource_type: string; team: string; status: string; created_at: string }[] = []
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, resource_type, team, status, created_at
+       FROM infra_requests
+       WHERE LOWER(requestor_email) = $1
+       ORDER BY created_at DESC
+       LIMIT 5`,
+      [userEmail]
     )
+    recentRequests = rows
+  } catch (err) {
+    console.error("[create-infra] Failed to fetch recent requests:", err)
+  }
+
+  return <InfraPageClient teams={teams} recentRequests={recentRequests} />
 }

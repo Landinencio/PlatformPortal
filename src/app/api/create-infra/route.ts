@@ -1,6 +1,8 @@
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { NextResponse } from "next/server"
+import { getSessionRole } from "@/lib/session-role";
+import { trackUserActivity } from "@/lib/user-activity";
 
 // This would be your n8n webhook URL
 // Internal K8s Service URL for n8n
@@ -14,6 +16,7 @@ export async function POST(req: Request) {
     }
 
     try {
+        const role = getSessionRole(session);
         const body = await req.json()
 
         // Enrich with user metadata
@@ -36,6 +39,24 @@ export async function POST(req: Request) {
         }
 
         console.log("Sent payload to n8n:", JSON.stringify(payload, null, 2))
+
+        try {
+            await trackUserActivity({
+                eventType: "api_action",
+                userEmail: session.user?.email || "unknown@unknown.local",
+                userName: session.user?.name || null,
+                userRole: role,
+                authSub: session.user?.oid || null,
+                path: "/api/create-infra",
+                action: "create_infra_request",
+                metadata: {
+                    resourceType: typeof body?.resource_type === "string" ? body.resource_type : null,
+                    project: typeof body?.project_name === "string" ? body.project_name : null,
+                },
+            });
+        } catch (trackError) {
+            console.error("Failed to track create-infra activity:", trackError);
+        }
 
         return NextResponse.json({ success: true, message: "Request forwarded to n8n" })
 

@@ -1,0 +1,47 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mr-metrics-snapshot
+  namespace: n8n
+spec:
+  # Every day at 4:00 AM UTC
+  schedule: "0 4 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 3600
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app: mr-metrics-snapshot
+        spec:
+          restartPolicy: Never
+          imagePullSecrets:
+            - name: harbor-registry
+          containers:
+            - name: mr-metrics
+              image: harbor.tooling.dp.iskaypet.com/tooling/mr-metrics-snapshot:latest
+              resources:
+                requests:
+                  cpu: "200m"
+                  memory: "256Mi"
+                limits:
+                  cpu: "500m"
+                  memory: "512Mi"
+              env:
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: platformportal-secrets
+                      key: database-url
+                - name: GITLAB_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: platformportal-secrets
+                      key: gitlab-token
+                - name: GITLAB_URL
+                  value: "https://gitlab.com"
+              command: ["node", "/app/mr-metrics-snapshot.js"]

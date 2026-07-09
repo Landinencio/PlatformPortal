@@ -1,0 +1,58 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: infra-live-check
+  namespace: n8n
+spec:
+  # Every 10 minutes: poll AWS to detect which executed infra requests are now
+  # live in ALL their requested environments, and notify the requestor.
+  # AWS is the source of truth (pipeline state is unreliable: applies can time
+  # out yet create the resource; multi-env applies are separate stages).
+  schedule: "*/10 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: infra-live-check
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: live-check
+            image: curlimages/curl:latest
+            imagePullPolicy: Always
+            env:
+            - name: INTERNAL_API_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: platformportal-secrets
+                  key: INTERNAL_API_SECRET
+            command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Starting infra live-check..."
+              echo "Date: $(date)"
+
+              STATUS=$(curl -X POST \
+                -H "Content-Type: application/json" \
+                -H "x-internal-secret: ${INTERNAL_API_SECRET}" \
+                -w "%{http_code}" \
+                -s -o /tmp/response.json \
+                --max-time 300 \
+                http://n8n-webhooks.n8n.svc.cluster.local:3000/api/infra-requests/live-check)
+
+              echo ""
+              echo "HTTP Status: $STATUS"
+              cat /tmp/response.json
+              echo ""
+
+              if [ "$STATUS" != "200" ]; then
+                echo "ERROR: live-check failed with status $STATUS"
+                exit 1
+              fi
+
+              echo "Live-check completed successfully!"

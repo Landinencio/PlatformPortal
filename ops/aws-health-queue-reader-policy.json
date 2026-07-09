@@ -1,0 +1,16 @@
+{
+  "_comment": "Inline policy `AwsHealthQueueReader` attached to the portal IRSA role `portal-inventory-irsa` (arn:aws:iam::444455556666:role/portal-inventory-irsa). Grants ONLY the three SQS read/delete actions the portal needs to poll and drain the AWS Health queue (lib/aws-health.ts -> pollAwsHealthQueue / syncAwsHealthEvents). Scoped to the single queue ARN (least privilege, req 3.6). Applied with: aws iam put-role-policy --role-name portal-inventory-irsa --policy-name AwsHealthQueueReader --policy-document file://ops/aws-health-queue-reader-policy.json (put-role-policy overwrites -> idempotent).",
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AwsHealthQueueReader",
+      "Effect": "Allow",
+      "Action": [
+        "sqs:ReceiveMessage",
+        "sqs:DeleteMessage",
+        "sqs:GetQueueAttributes"
+      ],
+      "Resource": "arn:aws:sqs:eu-west-1:444455556666:portal-aws-health-events"
+    }
+  ]
+}

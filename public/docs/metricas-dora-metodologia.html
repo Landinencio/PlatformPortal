@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Metodología de Métricas — Portal de Plataforma</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.7; color: #1a1a2e; background: #fafafa; padding: 2rem; max-width: 900px; margin: 0 auto; }
+  h1 { font-size: 2rem; margin-bottom: 0.5rem; color: #0f172a; border-bottom: 3px solid #e67e22; padding-bottom: 0.5rem; }
+  h2 { font-size: 1.5rem; margin-top: 2.5rem; margin-bottom: 0.75rem; color: #1e293b; border-left: 4px solid #e67e22; padding-left: 0.75rem; }
+  h3 { font-size: 1.15rem; margin-top: 1.5rem; margin-bottom: 0.5rem; color: #334155; }
+  p { margin-bottom: 0.75rem; color: #475569; }
+  strong { color: #1e293b; }
+  code { background: #f1f5f9; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.9em; color: #be185d; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.9rem; }
+  th, td { border: 1px solid #e2e8f0; padding: 0.6rem 1rem; text-align: left; }
+  th { background: #f8fafc; font-weight: 600; color: #1e293b; }
+  tr:nth-child(even) { background: #f8fafc; }
+  .badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+  .elite { background: #dcfce7; color: #166534; }
+  .high { background: #dbeafe; color: #1e40af; }
+  .medium { background: #fef3c7; color: #92400e; }
+  .low { background: #fee2e2; color: #991b1b; }
+  .section { background: white; border-radius: 12px; padding: 1.5rem 2rem; margin: 1.5rem 0; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  .formula { background: #f1f5f9; border-left: 3px solid #6366f1; padding: 0.75rem 1rem; margin: 0.75rem 0; font-family: monospace; font-size: 0.9rem; border-radius: 0 6px 6px 0; }
+  .note { background: #fffbeb; border: 1px solid #fbbf24; border-radius: 8px; padding: 0.75rem 1rem; margin: 0.75rem 0; font-size: 0.9rem; }
+  .footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #e2e8f0; font-size: 0.8rem; color: #94a3b8; text-align: center; }
+  @media print { body { padding: 1rem; } .section { box-shadow: none; border: 1px solid #e2e8f0; } }
+  @media (max-width: 600px) { body { padding: 1rem; } .section { padding: 1rem; } }
+</style>
+</head>
+<body>
+
+<h1>📊 Metodología de Métricas de Ingeniería</h1>
+<p>Portal de Plataforma — IskayPet Digital Hub</p>
+
+<div class="section">
+<h2>1. Visión General</h2>
+<p>El portal mide el rendimiento de ingeniería usando tres pilares:</p>
+<ul style="margin-left:1.5rem; margin-bottom:0.75rem;">
+<li><strong>DORA Metrics</strong> — Las 4 métricas estándar de la industria</li>
+<li><strong>Indicadores de Gestión</strong> — Flujo de MRs, colaboración y ritmo por persona</li>
+<li><strong>Calidad de Código</strong> — Cobertura, vulnerabilidades y deuda técnica (SonarQube)</li>
+</ul>
+<p>Los datos se recopilan automáticamente desde <strong>GitLab</strong> (despliegues, commits, MRs) y <strong>SonarQube</strong> (análisis estático). El snapshot nocturno se ejecuta a las 2:00 AM.</p>
+</div>
+
+<div class="section">
+<h2>2. Métricas DORA</h2>
+<p>Basadas en el informe <em>Accelerate: State of DevOps</em> de Google/DORA. Son el estándar de la industria para medir equipos de software.</p>
+
+<h3>2.1 Deployment Frequency</h3>
+<p><strong>Qué mide:</strong> Número medio de despliegues exitosos a producción por proyecto activo y día.</p>
+<div class="formula">DF = Total deploys exitosos / (Proyectos activos × Días del periodo)</div>
+<p><strong>Fuente:</strong> Jobs de GitLab CI/CD con nombres de deploy a producción (<code>deploy_prod</code>, <code>deploy-production</code>, <code>deploy_artifact</code>, <code>deploy_prd</code>).</p>
+<p><strong>Solo producción:</strong> Entornos <code>production</code>, <code>prod</code>, <code>prd</code>, <code>live</code>, o que terminen en <code>-pro</code>. Se excluyen: dev, uat, staging, test, qa, sandbox.</p>
+
+<h3>2.2 Lead Time for Changes</h3>
+<p><strong>Qué mide:</strong> Tiempo desde el primer commit hasta que el cambio llega a producción.</p>
+<div class="formula">Lead Time = Fecha deploy completado − Fecha primer commit de la MR</div>
+<p>Se descartan lead times superiores a 90 días (outliers). Se usa la mediana.</p>
+
+<h3>2.3 Change Failure Rate</h3>
+<p><strong>Qué mide:</strong> Porcentaje de despliegues a producción que fallan.</p>
+<div class="formula">CFR% = (Jobs de deploy fallidos en producción / Total deploys) × 100</div>
+<p><strong>Importante:</strong> Solo cuenta jobs de deploy que se ejecutaron y fallaron en entornos de producción. Un pipeline que falla en tests antes del deploy NO cuenta.</p>
+<div class="note">⭐ Un CFR de 0% es el mejor resultado posible → nivel <span class="badge elite">Elite</span></div>
+
+<h3>2.4 Pipeline Recovery Time</h3>
+<p><strong>Qué mide:</strong> Tiempo medio entre un fallo de deploy y la siguiente entrega exitosa.</p>
+<div class="formula">PRT = Media de (Primer deploy exitoso post-fallo − Fecha del fallo)</div>
+<p>Ventana de análisis: últimos 14 días. Mide agilidad de recuperación del equipo.</p>
+</div>
+
+<div class="section">
+<h2>3. Niveles de Rendimiento DORA</h2>
+<table>
+<tr><th>Métrica</th><th><span class="badge elite">Elite</span></th><th><span class="badge high">High</span></th><th><span class="badge medium">Medium</span></th><th><span class="badge low">Low</span></th></tr>
+<tr><td>Deploy Frequency</td><td>≥1/día</td><td>1/sem–1/día</td><td>1/mes–1/sem</td><td>&lt;1/mes</td></tr>
+<tr><td>Lead Time</td><td>≤1h</td><td>1h–1d</td><td>1d–1sem</td><td>&gt;1 semana</td></tr>
+<tr><td>Change Failure Rate</td><td>≤5%</td><td>5–15%</td><td>15–30%</td><td>&gt;30%</td></tr>
+<tr><td>Pipeline Recovery Time</td><td>≤1h</td><td>1h–1d</td><td>1d–1sem</td><td>&gt;1 semana</td></tr>
+</table>
+</div>
+
+<div class="section">
+<h2>4. Clasificación de Despliegues</h2>
+<p>Cada deploy se clasifica automáticamente:</p>
+<table>
+<tr><th>Tipo</th><th>Detección</th></tr>
+<tr><td><strong>Feature</strong></td><td>Por defecto si no hay otra señal</td></tr>
+<tr><td><strong>Hotfix</strong></td><td>Rama <code>hotfix/</code> o <code>fix/</code> · Label <code>hotfix</code>/<code>incident</code> · Commit <code>fix:</code>/<code>hotfix:</code></td></tr>
+<tr><td><strong>Rollback</strong></td><td>Rama <code>rollback/</code>/<code>revert/</code> · Label <code>rollback</code>/<code>revert</code> · Commit <code>revert:</code> · Re-deploy de commit anterior</td></tr>
+</table>
+</div>
+
+<div class="section">
+<h2>5. Indicadores de Gestión</h2>
+<table>
+<tr><th>Indicador</th><th>Descripción</th></tr>
+<tr><td>MRs Mergeadas</td><td>Total de Merge Requests fusionadas en el periodo</td></tr>
+<tr><td>MRs Abiertas</td><td>MRs actualmente abiertas (último snapshot)</td></tr>
+<tr><td>Reviews Dados</td><td>MRs donde la persona dejó comentarios de revisión</td></tr>
+<tr><td>Tiempo Medio Merge</td><td>Media de horas desde creación hasta merge (excluye Drafts)</td></tr>
+<tr><td>Personas Activas</td><td>Contribuidores con ≥1 MR mergeada o ≥1 review</td></tr>
+</table>
+<div class="note">💡 Las MRs que estuvieron en Draft (título "Draft:" o "WIP:") se excluyen del cálculo de tiempo medio para no inflar artificialmente el dato.</div>
+</div>
+
+<div class="section">
+<h2>6. Calidad de Código (SonarQube)</h2>
+<table>
+<tr><th>Métrica</th><th>Descripción</th></tr>
+<tr><td>Cobertura Media</td><td>Promedio de cobertura de tests entre proyectos seleccionados</td></tr>
+<tr><td>Vulnerabilidades</td><td>Suma de vulnerabilidades de seguridad + security hotspots</td></tr>
+<tr><td>Deuda Técnica</td><td>Tiempo estimado para resolver toda la deuda (code smells)</td></tr>
+<tr><td>Quality Gate</td><td>Estado del quality gate: OK / ERROR / WARN</td></tr>
+</table>
+</div>
+
+<div class="section">
+<h2>7. Filtros Disponibles</h2>
+<table>
+<tr><th>Filtro</th><th>Opciones</th></tr>
+<tr><td>Ventana Temporal</td><td>7, 15, 30, 90, 180 días</td></tr>
+<tr><td>Grupo GitLab</td><td>digital, retail, sre-infra, etc.</td></tr>
+<tr><td>Equipos</td><td>Squads dentro del grupo (con conteo de proyectos)</td></tr>
+<tr><td>Proyectos</td><td>Selección individual (solo proyectos activos en 6 meses)</td></tr>
+</table>
+</div>
+
+<div class="section">
+<h2>8. Recopilación de Datos</h2>
+<ul style="margin-left:1.5rem;">
+<li><strong>Snapshot nocturno (2:00 AM):</strong> Recorre todos los proyectos, recopila deploys, commits, MRs y calcula métricas diarias.</li>
+<li><strong>Webhook en tiempo real:</strong> Recibe eventos de push, MR y comentarios para actualizar contadores incrementalmente.</li>
+<li><strong>SonarQube:</strong> Consulta diaria de métricas de calidad.</li>
+</ul>
+</div>
+
+<div class="footer">
+<p>Portal de Plataforma — IskayPet Digital Hub · Mayo 2026</p>
+<p>Para feedback o correcciones, usa el botón "Feedback" en la sección de métricas.</p>
+</div>
+
+</body>
+</html>

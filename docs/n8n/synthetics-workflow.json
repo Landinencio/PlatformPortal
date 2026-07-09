@@ -1,0 +1,57 @@
+{
+    "name": "Synthetic Monitoring Checker",
+    "nodes": [
+        {
+            "parameters": {
+                "interval": 30,
+                "unit": "seconds"
+            },
+            "id": "fe13b4c1-90a1-409c-851c-6d1af9f7cb6e",
+            "name": "Interval",
+            "type": "n8n-nodes-base.interval",
+            "typeVersion": 1,
+            "position": [
+                460,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "http://n8n-webhooks.n8n.svc.cluster.local:3000/api/synthetics/run",
+                "options": {}
+            },
+            "id": "e0e3776b-3482-411a-8c7a-5b65f04a621d",
+            "name": "Run Synthetics",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.1,
+            "position": [
+                680,
+                300
+            ]
+        }
+    ],
+    "pinData": {},
+    "connections": {
+        "Interval": {
+            "main": [
+                [
+                    {
+                        "node": "Run Synthetics",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "active": true,
+    "settings": {
+        "executionOrder": "v1"
+    },
+    "versionId": "f90fa1e2-cccc-4444-bbbb-aaaa11112222",
+    "meta": {
+        "templateCredsSetupCompleted": true,
+        "instanceId": "synthetic-monitor-1"
+    }
+}

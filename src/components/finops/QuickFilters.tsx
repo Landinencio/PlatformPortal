@@ -4,6 +4,7 @@ import { Search, Filter, TrendingUp, TrendingDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useI18n } from "@/lib/i18n";
 
 interface QuickFiltersProps {
     searchTerm: string;
@@ -22,6 +23,7 @@ export function QuickFilters({
     chartView,
     onChartViewChange
 }: QuickFiltersProps) {
+    const { t } = useI18n();
 
     return (
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between p-4 bg-muted/30 rounded-xl border">
@@ -31,7 +33,7 @@ export function QuickFilters({
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                     type="text"
-                    placeholder="Search accounts or services..."
+                    placeholder={t("costs.searchAccountsServices")}
                     value={searchTerm}
                     onChange={(e) => onSearchChange(e.target.value)}
                     className="pl-10 bg-background"
@@ -42,7 +44,7 @@ export function QuickFilters({
             <div className="flex flex-wrap gap-2">
                 <div className="flex items-center gap-2">
                     <Filter className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-xs font-semibold text-muted-foreground uppercase">Filter:</span>
+                    <span className="text-xs font-semibold text-muted-foreground uppercase">{t("costs.filterLabel")}</span>
                 </div>
 
                 <Button
@@ -51,7 +53,7 @@ export function QuickFilters({
                     onClick={() => onFilterModeChange('all')}
                     className="h-8"
                 >
-                    All
+                    {t("costs.filterAll")}
                 </Button>
 
                 <Button
@@ -61,7 +63,7 @@ export function QuickFilters({
                     className="h-8 gap-1"
                 >
                     <TrendingUp className="h-3 w-3" />
-                    Increases
+                    {t("costs.filterIncreases")}
                 </Button>
 
                 <Button
@@ -71,7 +73,7 @@ export function QuickFilters({
                     className="h-8 gap-1"
                 >
                     <TrendingDown className="h-3 w-3" />
-                    Decreases
+                    {t("costs.filterDecreases")}
                 </Button>
             </div>
 
@@ -83,7 +85,7 @@ export function QuickFilters({
                     onClick={() => onChartViewChange('service')}
                     className="h-7 px-3"
                 >
-                    By Service
+                    {t("costs.byService")}
                 </Button>
                 <Button
                     size="sm"
@@ -91,7 +93,7 @@ export function QuickFilters({
                     onClick={() => onChartViewChange('account')}
                     className="h-7 px-3"
                 >
-                    By Account
+                    {t("costs.byAccount")}
                 </Button>
             </div>
         </div>

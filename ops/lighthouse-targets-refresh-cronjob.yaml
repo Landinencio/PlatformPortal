@@ -1,0 +1,47 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: lighthouse-targets-refresh
+  namespace: n8n
+spec:
+  # Daily 22:00 — sitemap parsing is cheap (~2 min) and we want the targets
+  # table ready ahead of every scan run (which runs every 2 days at 03:00).
+  schedule: "0 22 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 1800
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app: lighthouse-targets-refresh
+        spec:
+          restartPolicy: Never
+          imagePullSecrets:
+            - name: harbor-registry
+          containers:
+            - name: targets-refresh
+              # Reuse the lighthouse-scanner image; it has node + pg + the script.
+              image: harbor.tooling.dp.iskaypet.com/tooling/lighthouse-scanner:latest
+              imagePullPolicy: Always
+              resources:
+                requests:
+                  cpu: "100m"
+                  memory: "256Mi"
+                limits:
+                  cpu: "500m"
+                  memory: "512Mi"
+              env:
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: platformportal-secrets
+                      key: database-url
+                - name: MAX_PER_TYPE
+                  value: "8"
+                - name: MAX_TOTAL_PER_BRAND
+                  value: "50"
+              command: ["node", "/app/lighthouse-targets-refresh.js"]

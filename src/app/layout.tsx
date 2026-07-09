@@ -1,15 +1,26 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { IBM_Plex_Sans, Sora } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
-import { GlobalChat } from "@/components/chat/global-chat";
+import { ConditionalShell } from "@/components/conditional-shell";
+import { CommandPalette } from "@/components/command-palette";
 import { cn } from "@/lib/utils";
 
-const inter = Inter({ subsets: ["latin"] });
+const plex = IBM_Plex_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-sans",
+});
+
+const sora = Sora({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-display",
+});
 
 export const metadata: Metadata = {
-  title: "Platform Portal",
-  description: "Internal Developer Portal for Platform Engineering",
+  title: "DevPortal | IskayPet",
+  description: "Internal Developer Portal for IskayPet",
 };
 
 export default function RootLayout({
@@ -19,10 +30,15 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={cn(inter.className, "min-h-screen bg-background antialiased")}>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: `try{const t=localStorage.getItem("theme");const d=t==="dark"||(t==null&&matchMedia("(prefers-color-scheme:dark)").matches);if(d)document.documentElement.classList.add("dark")}catch(e){}` }} />
+      </head>
+      <body className={cn(plex.variable, sora.variable, "min-h-screen bg-background font-sans antialiased")}>
         <Providers>
-          {children}
-          {/* <GlobalChat /> - Disabled by user request (Authentication issues) */}
+          <ConditionalShell>
+            {children}
+          </ConditionalShell>
+          <CommandPalette />
         </Providers>
       </body>
     </html>

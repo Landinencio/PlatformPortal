@@ -1,0 +1,321 @@
+{
+  "name": "Azure AD: Reporte Grupos VPN (AZ_VPN)",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        368,
+        -80
+      ],
+      "id": "ceeb6336-ef3c-4046-aae6-ad192c5e8165"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "AZURE_TENANT_ID",
+              "value": "19e73cc9-78d1-4540-862c-5a89572ef80e"
+            },
+            {
+              "name": "AZURE_CLIENT_ID",
+              "value": "bbca2c99-4520-44a8-8108-cb00333e5792"
+            },
+            {
+              "name": "AZURE_CLIENT_SECRET",
+              "value": "REDACTED_AZURE_CLIENT_SECRET_ROTATE_ME"
+            },
+            {
+              "name": "VPN_GROUP_PREFIX",
+              "value": "AZ_VPN"
+            },
+            {
+              "name": "EMAIL_TO",
+              "value": "inaki.riesco@iskaypet.com"
+            },
+            {
+              "name": "EMAIL_FROM",
+              "value": "n8n-azure@tooling.dp.iskaypet.com"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        592,
+        -80
+      ],
+      "id": "ef14e765-a0a4-4e7e-892f-98134a5df332"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://login.microsoftonline.com/{{ $json.AZURE_TENANT_ID }}/oauth2/v2.0/token",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/x-www-form-urlencoded"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "client_id",
+              "value": "={{ $json.AZURE_CLIENT_ID }}"
+            },
+            {
+              "name": "client_secret",
+              "value": "={{ $json.AZURE_CLIENT_SECRET }}"
+            },
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            },
+            {
+              "name": "scope",
+              "value": "https://graph.microsoft.com/.default"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "name": "Get Azure Token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        816,
+        -80
+      ],
+      "id": "9acdce25-c249-4714-8ee3-8692aabbc8cb"
+    },
+    {
+      "parameters": {
+        "jsCode": "const token = $json.access_token;\nconst prefix = $('Config').first().json['VPN_GROUP_PREFIX'];\nlet script = `\nconst https = require('https');\nconst fs = require('fs');\n\nconst TOKEN = '__TOKEN__';\nconst PREFIX = '__PREFIX__';\nconst OUTPUT = '/tmp/azure_vpn_groups_report.json';\n\nfunction graphGet(url) {\n  return new Promise((resolve, reject) => {\n    https.get(url, { headers: { 'Authorization': 'Bearer ' + TOKEN } }, res => {\n      let d = '';\n      res.on('data', c => d += c);\n      res.on('end', () => {\n        try { resolve(JSON.parse(d)); }\n        catch(e) { reject(new Error('Parse error')); }\n      });\n    }).on('error', reject);\n  });\n}\n\nasync function paginate(url) {\n  const results = [];\n  while (url) {\n    const d = await graphGet(url);\n    if (d.error) { console.error('API Error:', d.error.message); break; }\n    results.push(...(d.value || []));\n    url = d['@odata.nextLink'] || null;\n    if (results.length % 500 === 0) console.log('  ...' + results.length);\n  }\n  return results;\n}\n\nasync function main() {\n  console.log('Step 1: Fetching ALL enabled users with signInActivity...');\n  const allUsers = await paginate(\n    'https://graph.microsoft.com/beta/users?$filter=accountEnabled%20eq%20true' +\n    '&$select=id,userPrincipalName,createdDateTime,signInActivity' +\n    '&$top=100'\n  );\n  console.log('Total enabled users: ' + allUsers.length);\n  \n  const userMap = new Map();\n  allUsers.forEach(u => {\n    const sia = u.signInActivity || {};\n    const lastI = sia.lastSignInDateTime || null;\n    const lastNI = sia.lastNonInteractiveSignInDateTime || null;\n    \n    let latest = null;\n    if (lastI && lastNI) latest = new Date(lastI) > new Date(lastNI) ? lastI : lastNI;\n    else latest = lastI || lastNI;\n    \n    userMap.set(u.id, {\n      userPrincipalName: u.userPrincipalName || '',\n      createdDate: (u.createdDateTime || '').substring(0, 10),\n      lastLogin: latest ? latest.substring(0, 19).replace('T', ' ') : 'Nunca'\n    });\n  });\n  console.log('User map created with ' + userMap.size + ' entries');\n\n  console.log('Step 2: Fetching VPN groups with prefix: ' + PREFIX);\n  const groups = await paginate(\n    'https://graph.microsoft.com/v1.0/groups?$filter=startswith(displayName,\\\\'' + PREFIX + '\\\\')' +\n    '&$select=id,displayName,description&$top=100'\n  );\n  groups.sort((a, b) => (a.displayName || '').localeCompare(b.displayName || ''));\n  console.log('Found ' + groups.length + ' VPN groups');\n\n  const report = [];\n  for (const g of groups) {\n    console.log('Processing: ' + g.displayName);\n    const membersRaw = await paginate(\n      'https://graph.microsoft.com/v1.0/groups/' + g.id + '/members?$select=id,userPrincipalName,displayName&$top=100'\n    );\n    const memberIds = membersRaw.filter(m => m.userPrincipalName);\n    console.log('  Members: ' + memberIds.length);\n\n    const members = [];\n    for (const m of memberIds) {\n      const userData = userMap.get(m.id);\n      if (userData) {\n        members.push(userData);\n      } else {\n        members.push({\n          userPrincipalName: m.userPrincipalName || m.displayName || m.id,\n          createdDate: 'N/D',\n          lastLogin: 'N/D'\n        });\n      }\n    }\n    members.sort((a, b) => a.userPrincipalName.localeCompare(b.userPrincipalName));\n    report.push({\n      groupName: g.displayName,\n      groupId: g.id,\n      description: g.description || '',\n      memberCount: members.length,\n      members: members\n    });\n    console.log('  Completed: ' + g.displayName + ' (' + members.length + ' members)');\n  }\n\n  report.sort((a, b) => a.groupName.localeCompare(b.groupName));\n  fs.writeFileSync(OUTPUT, JSON.stringify(report));\n  const totalMembers = report.reduce((s, g) => s + g.memberCount, 0);\n  console.log('TOTAL_GROUPS: ' + report.length);\n  console.log('TOTAL_MEMBERS: ' + totalMembers);\n  console.log('DONE');\n}\nmain().catch(e => { console.error('FATAL:', e); process.exit(1); });\n`;\nscript = script.replace('__TOKEN__', token);\nscript = script.replace('__PREFIX__', prefix);\nconst b64 = Buffer.from(script).toString('base64');\nreturn [{ json: { scriptB64: b64 } }];"
+      },
+      "name": "Build Fetch Script",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        -80
+      ],
+      "id": "ec2865e3-57db-479f-976a-b225c8d7bd75"
+    },
+    {
+      "parameters": {
+        "command": "=echo '{{ $json.scriptB64 }}' | base64 -d | node"
+      },
+      "name": "Fetch VPN Groups",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1264,
+        -80
+      ],
+      "id": "e90cb3b0-803d-4851-b711-64408d5d10cc"
+    },
+    {
+      "parameters": {
+        "jsCode": "let script = `\nconst fs = require('fs');\nconst zlib = require('zlib');\n\nconst report = JSON.parse(fs.readFileSync('/tmp/azure_vpn_groups_report.json', 'utf8'));\nconsole.log('Building multi-sheet Excel for ' + report.length + ' VPN groups...');\n\nfunction esc(s) {\n  if (s == null) return '';\n  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\\\\\\\\\\\\\\\\\"/g,'&quot;');\n}\n\nfunction sanitizeSheetName(name) {\n  let sn = String(name);\n  let out = '';\n  for (let i = 0; i < sn.length && out.length < 31; i++) {\n    let c = sn[i];\n    if ('[]*?/:'.includes(c)) c = '_';\n    out += c;\n  }\n  return out;\n}\n\nfunction col(c) { let s=''; while(c>=0){s=String.fromCharCode(65+(c%26))+s;c=Math.floor(c/26)-1;} return s; }\n\nconst ssMap = new Map();\nconst ssList = [];\nfunction addSS(s) { const k = String(s); if (!ssMap.has(k)) { ssMap.set(k, ssList.length); ssList.push(k); } return ssMap.get(k); }\n\nconst summaryHeaders = ['Grupo', 'Num Miembros', 'Responsable'];\nconst detailHeaders = ['UserPrincipalName', 'Fecha Creacion Usuario', 'Fecha Last Login'];\nsummaryHeaders.forEach(addSS);\ndetailHeaders.forEach(addSS);\naddSS('TOTAL');\nreport.forEach(g => {\n  addSS(g.groupName); addSS(String(g.memberCount)); addSS('');\n  g.members.forEach(m => { addSS(m.userPrincipalName); addSS(m.createdDate); addSS(m.lastLogin); });\n});\nconst totalMembers = report.reduce((s,g) => s + g.memberCount, 0);\naddSS(String(totalMembers));\n\nconst sheets = [];\n\n// Sheet 1: Resumen\nlet sd1 = '<row r=\"1\">';\nsummaryHeaders.forEach((h, i) => {\n  sd1 += '<c r=\"' + col(i) + '1\" t=\"s\" s=\"1\"><v>' + addSS(h) + '</v></c>';\n});\nsd1 += '</row>';\nreport.forEach((g, ri) => {\n  const rn = ri + 2;\n  sd1 += '<row r=\"' + rn + '\">';\n  sd1 += '<c r=\"A' + rn + '\" t=\"s\" s=\"0\"><v>' + addSS(g.groupName) + '</v></c>';\n  sd1 += '<c r=\"B' + rn + '\" t=\"s\" s=\"3\"><v>' + addSS(String(g.memberCount)) + '</v></c>';\n  sd1 += '<c r=\"C' + rn + '\" t=\"s\" s=\"0\"><v>' + addSS('') + '</v></c>';\n  sd1 += '</row>';\n});\nconst totalRow = report.length + 2;\nsd1 += '<row r=\"' + totalRow + '\">';\nsd1 += '<c r=\"A' + totalRow + '\" t=\"s\" s=\"1\"><v>' + addSS('TOTAL') + '</v></c>';\nsd1 += '<c r=\"B' + totalRow + '\" t=\"s\" s=\"4\"><v>' + addSS(String(totalMembers)) + '</v></c>';\nsd1 += '<c r=\"C' + totalRow + '\" t=\"s\" s=\"0\"><v>' + addSS('') + '</v></c>';\nsd1 += '</row>';\n\nconst sheet1xml = '<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>'\n  + '<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">'\n  + '<cols><col min=\"1\" max=\"1\" width=\"45\" customWidth=\"1\"/><col min=\"2\" max=\"2\" width=\"16\" customWidth=\"1\"/>'\n  + '<col min=\"3\" max=\"3\" width=\"30\" customWidth=\"1\"/></cols>'\n  + '<sheetData>' + sd1 + '</sheetData>'\n  + '<autoFilter ref=\"A1:C' + (report.length + 1) + '\"/></worksheet>';\nsheets.push({ name: 'Resumen', xml: sheet1xml });\n\n// Detail sheets\nreport.forEach(g => {\n  let sd = '<row r=\"1\">';\n  detailHeaders.forEach((h, i) => {\n    sd += '<c r=\"' + col(i) + '1\" t=\"s\" s=\"1\"><v>' + addSS(h) + '</v></c>';\n  });\n  sd += '</row>';\n  g.members.forEach((m, ri) => {\n    const rn = ri + 2;\n    sd += '<row r=\"' + rn + '\">';\n    sd += '<c r=\"A' + rn + '\" t=\"s\" s=\"0\"><v>' + addSS(m.userPrincipalName) + '</v></c>';\n    sd += '<c r=\"B' + rn + '\" t=\"s\" s=\"0\"><v>' + addSS(m.createdDate) + '</v></c>';\n    let ls = '0';\n    if (m.lastLogin === 'Nunca') {\n      ls = '2';\n    } else if (m.lastLogin !== 'N/D' && m.lastLogin !== 'Error') {\n      try {\n        const loginDate = new Date(m.lastLogin.replace(' ', 'T'));\n        const now = new Date();\n        const daysDiff = Math.floor((now - loginDate) / 86400000);\n        if (daysDiff > 90) ls = '2';\n      } catch(e) {}\n    }\n    sd += '<c r=\"C' + rn + '\" t=\"s\" s=\"' + ls + '\"><v>' + addSS(m.lastLogin) + '</v></c>';\n    sd += '</row>';\n  });\n  const sx = '<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>'\n    + '<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">'\n    + '<cols><col min=\"1\" max=\"1\" width=\"45\" customWidth=\"1\"/><col min=\"2\" max=\"2\" width=\"22\" customWidth=\"1\"/>'\n    + '<col min=\"3\" max=\"3\" width=\"22\" customWidth=\"1\"/></cols>'\n    + '<sheetData>' + sd + '</sheetData>'\n    + '<autoFilter ref=\"A1:C' + (g.members.length + 1) + '\"/></worksheet>';\n  sheets.push({ name: sanitizeSheetName(g.groupName), xml: sx });\n});\n\n// Shared strings\nconst ssXml = '<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>'\n  + '<sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" count=\"'\n  + ssList.length + '\" uniqueCount=\"' + ssList.length + '\">'\n  + ssList.map(s => '<si><t>' + esc(s) + '</t></si>').join('') + '</sst>';\n\n// Styles\nconst stylesXml = '<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>'\n  + '<styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">'\n  + '<fonts count=\"2\"><font><sz val=\"11\"/><name val=\"Calibri\"/></font>'\n  + '<font><b/><sz val=\"11\"/><color rgb=\"FFFFFFFF\"/><name val=\"Calibri\"/></font></fonts>'\n  + '<fills count=\"4\"><fill><patternFill patternType=\"none\"/></fill>'\n  + '<fill><patternFill patternType=\"gray125\"/></fill>'\n  + '<fill><patternFill patternType=\"solid\"><fgColor rgb=\"FF2F5496\"/></patternFill></fill>'\n  + '<fill><patternFill patternType=\"solid\"><fgColor rgb=\"FFFFC7CE\"/></patternFill></fill></fills>'\n  + '<borders count=\"1\"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'\n  + '<cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/></cellStyleXfs>'\n  + '<cellXfs count=\"5\">'\n  + '<xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/>'\n  + '<xf numFmtId=\"0\" fontId=\"1\" fillId=\"2\" borderId=\"0\" xfId=\"0\" applyFont=\"1\" applyFill=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\" wrapText=\"1\"/></xf>'\n  + '<xf numFmtId=\"0\" fontId=\"0\" fillId=\"3\" borderId=\"0\" xfId=\"0\" applyFill=\"1\"><alignment horizontal=\"center\"/></xf>'\n  + '<xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyAlignment=\"1\"><alignment horizontal=\"center\"/></xf>'\n  + '<xf numFmtId=\"0\" fontId=\"1\" fillId=\"2\" borderId=\"0\" xfId=\"0\" applyFont=\"1\" applyFill=\"1\" applyAlignment=\"1\"><alignment horizontal=\"center\"/></xf>'\n  + '</cellXfs></styleSheet>';\n\n// Workbook\nlet sheetsTag = '';\nsheets.forEach((s, i) => {\n  sheetsTag += '<sheet name=\"' + esc(s.name) + '\" sheetId=\"' + (i+1) + '\" r:id=\"rId' + (i+1) + '\"/>';\n});\nconst wbXml = '<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>'\n  + '<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">'\n  + '<sheets>' + sheetsTag + '</sheets></workbook>';\n\n// Workbook rels\nlet wbrRels = '';\nsheets.forEach((s, i) => {\n  wbrRels += '<Relationship Id=\"rId' + (i+1) + '\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet' + (i+1) + '.xml\"/>';\n});\nwbrRels += '<Relationship Id=\"rId' + (sheets.length+1) + '\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings\" Target=\"sharedStrings.xml\"/>';\nwbrRels += '<Relationship Id=\"rId' + (sheets.length+2) + '\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/>';\nconst wbrXml = '<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>'\n  + '<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">' + wbrRels + '</Relationships>';\n\n// Content Types\nlet overrides = '';\nsheets.forEach((s, i) => {\n  overrides += '<Override PartName=\"/xl/worksheets/sheet' + (i+1) + '.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>';\n});\nconst ctXml = '<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>'\n  + '<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">'\n  + '<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>'\n  + '<Default Extension=\"xml\" ContentType=\"application/xml\"/>'\n  + '<Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/>'\n  + overrides\n  + '<Override PartName=\"/xl/sharedStrings.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml\"/>'\n  + '<Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/>'\n  + '</Types>';\n\nconst relsXml = '<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>'\n  + '<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">'\n  + '<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>';\n\n// ZIP builder\nfunction crc32(buf) {\n  let table = crc32.table;\n  if (!table) {\n    table = new Uint32Array(256);\n    for (let i = 0; i < 256; i++) {\n      let c = i;\n      for (let j = 0; j < 8; j++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);\n      table[i] = c;\n    }\n    crc32.table = table;\n  }\n  let crc = 0xFFFFFFFF;\n  for (let i = 0; i < buf.length; i++) crc = table[(crc ^ buf[i]) & 0xFF] ^ (crc >>> 8);\n  return (crc ^ 0xFFFFFFFF) >>> 0;\n}\n\nfunction buildZip(entries) {\n  const localHeaders = [];\n  const centralHeaders = [];\n  let offset = 0;\n\n  for (const entry of entries) {\n    const nameB = Buffer.from(entry.name, 'utf8');\n    const raw = entry.data;\n    const compressed = zlib.deflateRawSync(raw);\n    const cv = crc32(raw);\n\n    const lh = Buffer.alloc(30 + nameB.length);\n    lh.writeUInt32LE(0x04034b50, 0);\n    lh.writeUInt16LE(20, 4);\n    lh.writeUInt16LE(0, 6);\n    lh.writeUInt16LE(8, 8);\n    lh.writeUInt16LE(0, 10);\n    lh.writeUInt16LE(0, 12);\n    lh.writeUInt32LE(cv, 14);\n    lh.writeUInt32LE(compressed.length, 18);\n    lh.writeUInt32LE(raw.length, 22);\n    lh.writeUInt16LE(nameB.length, 26);\n    lh.writeUInt16LE(0, 28);\n    nameB.copy(lh, 30);\n\n    localHeaders.push(Buffer.concat([lh, compressed]));\n\n    const ch = Buffer.alloc(46 + nameB.length);\n    ch.writeUInt32LE(0x02014b50, 0);\n    ch.writeUInt16LE(20, 4);\n    ch.writeUInt16LE(20, 6);\n    ch.writeUInt16LE(0, 8);\n    ch.writeUInt16LE(8, 10);\n    ch.writeUInt16LE(0, 12);\n    ch.writeUInt16LE(0, 14);\n    ch.writeUInt32LE(cv, 16);\n    ch.writeUInt32LE(compressed.length, 20);\n    ch.writeUInt32LE(raw.length, 24);\n    ch.writeUInt16LE(nameB.length, 28);\n    ch.writeUInt16LE(0, 30);\n    ch.writeUInt16LE(0, 32);\n    ch.writeUInt16LE(0, 34);\n    ch.writeUInt16LE(0, 36);\n    ch.writeUInt32LE(0, 38);\n    ch.writeUInt32LE(offset, 42);\n    nameB.copy(ch, 46);\n\n    centralHeaders.push(ch);\n    offset += lh.length + compressed.length;\n  }\n\n  const centralDir = Buffer.concat(centralHeaders);\n  const centralDirOffset = offset;\n\n  const eocd = Buffer.alloc(22);\n  eocd.writeUInt32LE(0x06054b50, 0);\n  eocd.writeUInt16LE(0, 4);\n  eocd.writeUInt16LE(0, 6);\n  eocd.writeUInt16LE(entries.length, 8);\n  eocd.writeUInt16LE(entries.length, 10);\n  eocd.writeUInt32LE(centralDir.length, 12);\n  eocd.writeUInt32LE(centralDirOffset, 16);\n  eocd.writeUInt16LE(0, 20);\n\n  return Buffer.concat([...localHeaders, centralDir, eocd]);\n}\n\nconst zipEntries = [\n  { name: '[Content_Types].xml', data: Buffer.from(ctXml, 'utf8') },\n  { name: '_rels/.rels', data: Buffer.from(relsXml, 'utf8') },\n  { name: 'xl/workbook.xml', data: Buffer.from(wbXml, 'utf8') },\n  { name: 'xl/_rels/workbook.xml.rels', data: Buffer.from(wbrXml, 'utf8') },\n  { name: 'xl/sharedStrings.xml', data: Buffer.from(ssXml, 'utf8') },\n  { name: 'xl/styles.xml', data: Buffer.from(stylesXml, 'utf8') },\n];\nsheets.forEach((s, i) => {\n  zipEntries.push({ name: 'xl/worksheets/sheet' + (i+1) + '.xml', data: Buffer.from(s.xml, 'utf8') });\n});\n\nconst zipBuf = buildZip(zipEntries);\nfs.writeFileSync('/tmp/grupos_vpn_reporte.xlsx', zipBuf);\nconsole.log('Excel: ' + zipBuf.length + ' bytes, ' + sheets.length + ' sheets');\nconsole.log('DONE');\n`;\nconst b64 = Buffer.from(script).toString('base64');\nreturn [{ json: { scriptB64: b64 } }];"
+      },
+      "name": "Build Excel Script",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1488,
+        -80
+      ],
+      "id": "5159e65e-91b7-41bc-b696-844982e3ec13"
+    },
+    {
+      "parameters": {
+        "command": "=echo '{{ $json.scriptB64 }}' | base64 -d | node"
+      },
+      "name": "Generate Excel",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1712,
+        -80
+      ],
+      "id": "9e8303bf-ecce-40ae-8754-5a7eb74059a2"
+    },
+    {
+      "parameters": {
+        "command": "base64 /tmp/grupos_vpn_reporte.xlsx"
+      },
+      "name": "Read Excel B64",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1936,
+        -80
+      ],
+      "id": "9c6de19b-f6b6-456e-b039-ff14c1ce1fdd"
+    },
+    {
+      "parameters": {
+        "jsCode": "const xlsxB64 = $json.stdout.trim();\nconst emailTo = $('Config').first().json['EMAIL_TO'];\nconst emailFrom = $('Config').first().json['EMAIL_FROM'];\nconst now = new Date().toISOString().substring(0, 10);\nconst po = $('Fetch VPN Groups').first().json.stdout || '';\nconst totalGroups = (po.match(/TOTAL_GROUPS: (\\d+)/) || [])[1] || '?';\nconst totalMembers = (po.match(/TOTAL_MEMBERS: (\\d+)/) || [])[1] || '?';\nconst subject = 'Reporte Grupos VPN (AZ_VPN) - ' + now;\nconst html = '<html><body style=\"font-family:Arial,sans-serif;font-size:14px;color:#333\">'\n  + '<h2 style=\"color:#2F5496\">Reporte de Grupos VPN (AZ_VPN)</h2>'\n  + '<p>Se adjunta el reporte de los grupos de acceso VPN en Azure AD (prefijo <b>AZ_VPN</b>).</p>'\n  + '<table style=\"border-collapse:collapse;margin:16px 0\">'\n  + '<tr><td style=\"padding:4px 12px;font-weight:bold\">Total grupos VPN:</td><td>' + totalGroups + '</td></tr>'\n  + '<tr><td style=\"padding:4px 12px;font-weight:bold\">Total miembros (suma):</td><td>' + totalMembers + '</td></tr>'\n  + '</table>'\n  + '<p><b>Contenido del Excel:</b></p>'\n  + '<ul>'\n  + '<li><b>Pesta\\u00f1a Resumen</b>: Listado de grupos con n\\u00ba de miembros y columna de responsable</li>'\n  + '<li><b>Pesta\\u00f1as por grupo</b>: Detalle de usuarios con UserPrincipalName, Fecha creaci\\u00f3n y \\u00daltimo login</li>'\n  + '</ul>'\n  + '<p>Fecha: <b>' + now + '</b></p>'\n  + '<p style=\"font-size:12px;color:#999;margin-top:24px\">Generado autom\\u00e1ticamente por n8n.</p>'\n  + '</body></html>';\nconst fileName = 'Grupos_VPN_Reporte_' + now + '.xlsx';\nreturn [{\n  json: { subject, html, emailTo, emailFrom, fileName },\n  binary: {\n    attachment: {\n      data: xlsxB64,\n      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',\n      fileName: fileName\n    }\n  }\n}];"
+      },
+      "name": "Prepare Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        -80
+      ],
+      "id": "67fc8c27-c8ba-41d5-95d7-b8ea49e26bc0"
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $json.emailFrom }}",
+        "toEmail": "={{ $json.emailTo }}",
+        "subject": "={{ $json.subject }}",
+        "html": "={{ $json.html }}",
+        "options": {
+          "attachments": "attachment"
+        }
+      },
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        2384,
+        -80
+      ],
+      "id": "6d0220a9-a26b-4d00-9c96-f01617f7449b",
+      "webhookId": "0e8b1ec5-0af2-4a07-98f1-12bcfcb7af34",
+      "credentials": {
+        "smtp": {
+          "id": "BnsgykToCoSaofzV",
+          "name": "SMTP account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Get Azure Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Azure Token": {
+      "main": [
+        [
+          {
+            "node": "Build Fetch Script",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Fetch Script": {
+      "main": [
+        [
+          {
+            "node": "Fetch VPN Groups",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch VPN Groups": {
+      "main": [
+        [
+          {
+            "node": "Build Excel Script",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Excel Script": {
+      "main": [
+        [
+          {
+            "node": "Generate Excel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Excel": {
+      "main": [
+        [
+          {
+            "node": "Read Excel B64",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Excel B64": {
+      "main": [
+        [
+          {
+            "node": "Prepare Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Email": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "7278ef8d-b012-496f-aa5b-2c945746adb4",
+  "meta": {
+    "instanceId": "c52849af140fecdfb0c6d81c4296e78a8cded6ecf6ac196569f43a8812b332a0"
+  },
+  "id": "0s9PVSDgYWbwBodT",
+  "tags": []
+}

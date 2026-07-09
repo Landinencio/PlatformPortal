@@ -1,0 +1,65 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: finops-daily-digest
+  namespace: n8n
+spec:
+  # Daily at 10:20 Europe/Madrid (just before the daily standup): generate the
+  # Daily FinOps Digest (FinOps advisor analysis + AWS news of the day) and post
+  # it to the dedicated FinOps Teams webhook.
+  #
+  # spec.timeZone requires the CronJob TimeZone feature (k8s >= 1.27, GA 1.27).
+  # FALLBACK (k8s < 1.27, no timeZone support): remove the `timeZone` field and
+  # set `schedule: "20 8 * * *"` (08:20 UTC = 10:20 CEST, summer/Europe-Madrid
+  # = UTC+2). Note: in winter (CET = UTC+1) the UTC fallback fires at 09:20
+  # UTC = 10:20 CET, so the UTC value would need to be "20 9 * * *". Using the
+  # timeZone field avoids this winter/summer drift.
+  timeZone: "Europe/Madrid"
+  schedule: "20 10 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: finops-daily-digest
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: finops-daily-digest
+            image: curlimages/curl:latest
+            imagePullPolicy: Always
+            env:
+            - name: INTERNAL_API_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: platformportal-secrets
+                  key: INTERNAL_API_SECRET
+            command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Starting FinOps daily digest..."
+              echo "Date: $(date)"
+
+              STATUS=$(curl -X POST \
+                -H "Content-Type: application/json" \
+                -H "x-internal-secret: ${INTERNAL_API_SECRET}" \
+                -w "%{http_code}" \
+                -s -o /tmp/response.json \
+                --max-time 300 \
+                http://n8n-webhooks.n8n.svc.cluster.local:3000/api/finops/daily-digest)
+
+              echo ""
+              echo "HTTP Status: $STATUS"
+              cat /tmp/response.json
+              echo ""
+
+              if [ "$STATUS" != "200" ]; then
+                echo "ERROR: finops daily digest failed with status $STATUS"
+                exit 1
+              fi
+
+              echo "FinOps daily digest completed successfully!"

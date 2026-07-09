@@ -1,0 +1,109 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dora-backfill-gaps
+  namespace: n8n
+  labels:
+    app: dora-backfill
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 259200  # 72 horas
+  template:
+    metadata:
+      labels:
+        app: dora-backfill
+    spec:
+      restartPolicy: Never
+      serviceAccountName: default
+      containers:
+      - name: backfill
+        image: curlimages/curl:latest
+        imagePullPolicy: Always
+        env:
+        - name: TZ
+          value: Europe/Madrid
+        - name: DELAY_BETWEEN_DAYS
+          value: "600"
+        - name: API_URL
+          value: "http://n8n-webhooks.n8n.svc.cluster.local:3000"
+        - name: INTERNAL_API_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: INTERNAL_API_SECRET
+              name: platformportal-secrets
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "=========================================="
+          echo "DORA Backfill - Gap Fill (63 days)"
+          echo "Started at: $(date)"
+          echo "=========================================="
+          
+          SUCCESS_COUNT=0
+          FAIL_COUNT=0
+          day_num=1
+          TOTAL=63
+          
+          process_day() {
+            local d="$1"
+            echo "----------------------------------------"
+            echo "[$day_num/$TOTAL] Processing $d..."
+            echo "Time: $(date)"
+            
+            http_code=$(curl -X POST \
+              -H "Content-Type: application/json" \
+              -H "x-internal-secret: ${INTERNAL_API_SECRET}" \
+              -w "%{http_code}" \
+              -s -o /tmp/response.json \
+              --max-time 1200 \
+              "${API_URL}/api/metrics/snapshot?date=${d}")
+            
+            if [ "$http_code" = "200" ] || [ "$http_code" = "207" ]; then
+              echo "✓ SUCCESS (HTTP $http_code)"
+              SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+            else
+              echo "✗ FAILED (HTTP $http_code)"
+              FAIL_COUNT=$((FAIL_COUNT + 1))
+            fi
+            
+            echo "Progress: $((day_num * 100 / TOTAL))% | ✓$SUCCESS_COUNT ✗$FAIL_COUNT"
+            day_num=$((day_num + 1))
+            
+            if [ $day_num -le $TOTAL ]; then
+              sleep "$DELAY_BETWEEN_DAYS"
+            fi
+            echo ""
+          }
+          
+          # Sep 2025 (16-30)
+          for d in $(seq 16 30); do process_day "2025-09-$(printf %02d $d)"; done
+          
+          # Oct 2025 (1-31)
+          for d in $(seq 1 31); do process_day "2025-10-$(printf %02d $d)"; done
+          
+          # Nov 2025 (1-15)
+          for d in $(seq 1 15); do process_day "2025-11-$(printf %02d $d)"; done
+          
+          # Mar 2026 (7-8)
+          for d in 7 8; do process_day "2026-03-$(printf %02d $d)"; done
+          
+          echo "=========================================="
+          echo "BACKFILL GAPS COMPLETED"
+          echo "Finished at: $(date)"
+          echo "Successful: $SUCCESS_COUNT / $TOTAL"
+          echo "Failed: $FAIL_COUNT"
+          echo "=========================================="
+          
+          if [ "$FAIL_COUNT" -gt 6 ]; then
+            echo "ERROR: Too many failures"
+            exit 1
+          fi
+          exit 0
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"

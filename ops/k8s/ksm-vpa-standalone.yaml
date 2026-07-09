@@ -1,0 +1,253 @@
+# Standalone kube-state-metrics 2.17 dedicated to exposing VerticalPodAutoscaler
+# recommendations as Prometheus metrics via the CustomResourceState (CRS) feature.
+#
+# Why standalone? The grafana-k8s-monitoring 3.8.5 wrapper chart pins KSM 6.4.2,
+# whose nested template ignores customResourceState/extraRules/extraArgs from
+# the parent chart, so we cannot extend the existing KSM via Helm.
+#
+# Discovery: the pod ships with annotations `k8s.grafana.com/scrape: "true"`,
+# which Alloy's annotation_autodiscovery feature (already active in this chart)
+# picks up as a SEPARATE scrape_pool from the existing KSM. This avoids `up`
+# / `scrape_samples_scraped` series collisions that would happen if we shared
+# labels with the existing KSM Service.
+#
+# We also need the chart to allow the new metric names through Alloy's
+# include-list. See ops/k8s/alloy-vpa-allow.yaml.
+#
+# Apply per cluster (dp-dev / dp-uat now, dp-prod once VPAs are deployed):
+#   kubectl --context <ctx> apply -f ops/k8s/ksm-vpa-standalone.yaml
+#   helm --kube-context <ctx> upgrade grafana-k8s-monitoring \
+#     grafana/k8s-monitoring --version 3.8.5 -n cloud-agent \
+#     --reuse-values -f ops/k8s/alloy-vpa-allow.yaml
+#   kubectl --context <ctx> -n cloud-agent rollout restart \
+#     statefulset/grafana-k8s-monitoring-alloy-metrics
+#
+# Verify in Grafana Cloud after ~2 min:
+#   count by (k8s_cluster_name) (kube_customresource_verticalpodautoscaler_recommendation_memory_target_bytes)
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ksm-vpa
+  namespace: cloud-agent
+  labels:
+    app.kubernetes.io/name: ksm-vpa
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ksm-vpa
+  labels:
+    app.kubernetes.io/name: ksm-vpa
+rules:
+  - apiGroups: ["autoscaling.k8s.io"]
+    resources: ["verticalpodautoscalers"]
+    verbs: ["list", "watch"]
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ksm-vpa
+  labels:
+    app.kubernetes.io/name: ksm-vpa
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ksm-vpa
+subjects:
+  - kind: ServiceAccount
+    name: ksm-vpa
+    namespace: cloud-agent
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ksm-vpa-config
+  namespace: cloud-agent
+  labels:
+    app.kubernetes.io/name: ksm-vpa
+data:
+  config.yaml: |
+    kind: CustomResourceStateMetrics
+    spec:
+      resources:
+        - groupVersionKind:
+            group: autoscaling.k8s.io
+            version: v1
+            kind: VerticalPodAutoscaler
+          labelsFromPath:
+            namespace: [metadata, namespace]
+            verticalpodautoscaler: [metadata, name]
+            target_api_version: [spec, targetRef, apiVersion]
+            target_kind: [spec, targetRef, kind]
+            target_name: [spec, targetRef, name]
+          metrics:
+            - name: "verticalpodautoscaler_recommendation_cpu_target_cores"
+              help: "VPA recommended CPU target (cores)"
+              each:
+                type: Gauge
+                gauge:
+                  path: [status, recommendation, containerRecommendations]
+                  valueFrom: [target, cpu]
+                  labelsFromPath:
+                    container: [containerName]
+            - name: "verticalpodautoscaler_recommendation_cpu_lowerbound_cores"
+              help: "VPA recommended CPU lowerBound (cores)"
+              each:
+                type: Gauge
+                gauge:
+                  path: [status, recommendation, containerRecommendations]
+                  valueFrom: [lowerBound, cpu]
+                  labelsFromPath:
+                    container: [containerName]
+            - name: "verticalpodautoscaler_recommendation_cpu_upperbound_cores"
+              help: "VPA recommended CPU upperBound (cores)"
+              each:
+                type: Gauge
+                gauge:
+                  path: [status, recommendation, containerRecommendations]
+                  valueFrom: [upperBound, cpu]
+                  labelsFromPath:
+                    container: [containerName]
+            - name: "verticalpodautoscaler_recommendation_memory_target_bytes"
+              help: "VPA recommended memory target (bytes)"
+              each:
+                type: Gauge
+                gauge:
+                  path: [status, recommendation, containerRecommendations]
+                  valueFrom: [target, memory]
+                  labelsFromPath:
+                    container: [containerName]
+            - name: "verticalpodautoscaler_recommendation_memory_lowerbound_bytes"
+              help: "VPA recommended memory lowerBound (bytes)"
+              each:
+                type: Gauge
+                gauge:
+                  path: [status, recommendation, containerRecommendations]
+                  valueFrom: [lowerBound, memory]
+                  labelsFromPath:
+                    container: [containerName]
+            - name: "verticalpodautoscaler_recommendation_memory_upperbound_bytes"
+              help: "VPA recommended memory upperBound (bytes)"
+              each:
+                type: Gauge
+                gauge:
+                  path: [status, recommendation, containerRecommendations]
+                  valueFrom: [upperBound, memory]
+                  labelsFromPath:
+                    container: [containerName]
+            - name: "verticalpodautoscaler_spec_updatemode"
+              help: "VPA update mode"
+              each:
+                type: StateSet
+                stateSet:
+                  labelName: update_mode
+                  path: [spec, updatePolicy, updateMode]
+                  list: ["Off", "Initial", "Recreate", "Auto"]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ksm-vpa
+  namespace: cloud-agent
+  labels:
+    app.kubernetes.io/name: ksm-vpa
+    app.kubernetes.io/managed-by: portal-sre
+    portal.iskaypet.com/purpose: vpa-recommendations
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ksm-vpa
+      portal.iskaypet.com/purpose: vpa-recommendations
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ksm-vpa
+        portal.iskaypet.com/purpose: vpa-recommendations
+      annotations:
+        # Discovered by Alloy's annotation_autodiscovery (separate scrape_pool
+        # from the existing KSM, so no `up`/`scrape_samples_scraped` collision).
+        k8s.grafana.com/scrape: "true"
+        k8s.grafana.com/job: "integrations/kubernetes/ksm-vpa"
+        k8s.grafana.com/metrics_path: "/metrics"
+        k8s.grafana.com/metrics_portNumber: "8080"
+    spec:
+      serviceAccountName: ksm-vpa
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+      containers:
+        - name: kube-state-metrics
+          image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.17.0
+          imagePullPolicy: IfNotPresent
+          args:
+            # Emit ONLY CustomResourceState metrics (no built-in resources),
+            # so this KSM does not duplicate series from the existing KSM.
+            - --custom-resource-state-config-file=/config/config.yaml
+            - --custom-resource-state-only=true
+            - --port=8080
+            - --telemetry-port=8081
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: telemetry
+              containerPort: 8081
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: ksm-vpa-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ksm-vpa
+  namespace: cloud-agent
+  labels:
+    app.kubernetes.io/name: ksm-vpa
+    portal.iskaypet.com/purpose: vpa-recommendations
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: ksm-vpa
+    portal.iskaypet.com/purpose: vpa-recommendations

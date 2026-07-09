@@ -1,0 +1,136 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: platformportal-app
+  namespace: platformportal
+  labels:
+    app: platformportal-app
+    environment: dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: platformportal-app
+  template:
+    metadata:
+      labels:
+        app: platformportal-app
+      annotations:
+        k8s.grafana.com/scrape: "true"
+        k8s.grafana.com/metrics_path: /api/synthetics/metrics
+        k8s.grafana.com/metrics_portNumber: "3000"
+    spec:
+      serviceAccountName: platformportal-app
+      imagePullSecrets:
+        - name: harbor-registry
+      containers:
+        - name: portal
+          image: harbor.tooling.dp.iskaypet.com/tooling/platformportal:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+              name: http
+          env:
+            # --- Auth ---
+            - name: AZURE_AD_TENANT_ID
+              value: "19e73cc9-78d1-4540-862c-5a89572ef80e"
+            - name: NEXTAUTH_URL
+              value: "https://portal.today.dev.tooling.dp.iskaypet.com"
+            - name: AZURE_AD_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: n8n-webhooks-env
+                  key: AZURE_AD_CLIENT_ID
+            - name: AZURE_AD_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: n8n-webhooks-env
+                  key: AZURE_AD_CLIENT_SECRET
+            - name: NEXTAUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: n8n-webhooks-env
+                  key: NEXTAUTH_SECRET
+            # --- Database ---
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: platformportal-secrets
+                  key: database-url
+            # --- GitLab ---
+            - name: GITLAB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: platformportal-secrets
+                  key: gitlab-token
+            - name: GITLAB_URL
+              value: "https://gitlab.com"
+            # --- SonarQube ---
+            - name: SONARQUBE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: platformportal-secrets
+                  key: sonarqube-token
+            - name: SONARQUBE_URL
+              value: "http://sonarqube-sonarqube.sonarqube.svc.cluster.local:9000/api"
+            # --- Grafana ---
+            - name: GRAFANA_STACK_URL
+              value: "https://iskaylog.grafana.net"
+            - name: GRAFANA_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: platformportal-secrets
+                  key: GRAFANA_TOKEN
+            - name: GRAFANA_COOKIE
+              value: ""
+            # --- n8n ---
+            - name: N8N_WEBHOOK_URL
+              value: "http://n8n.n8n.svc.cluster.local/webhook/create-repo"
+            - name: N8N_ONBOARDING_WEBHOOK
+              value: "http://n8n.n8n.svc.cluster.local/webhook/user-onboarding"
+            - name: N8N_FINOPS_WEBHOOK
+              value: "http://n8n.n8n.svc.cluster.local/webhook/finops-costs"
+            - name: N8N_FINOPS_ATHENA_WEBHOOK
+              value: "http://n8n.n8n.svc.cluster.local/webhook/finops-athena"
+            - name: N8N_INTERNAL_URL
+              value: "http://n8n.n8n.svc.cluster.local"
+            # --- AWX ---
+            - name: AWX_API
+              value: "https://awx-ansible.tooling.dp.iskaypet.com/api/v2"
+            - name: AWX_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: platformportal-secrets
+                  key: awx-token
+            # --- Bedrock ---
+            - name: AWS_BEDROCK_REGION
+              value: "eu-west-1"
+            - name: AWS_BEDROCK_ROLE_ARN
+              value: "arn:aws:iam::100300500700:role/portal-bedrock-access"
+            - name: AWS_BEDROCK_MODEL_ID
+              value: "eu.amazon.nova-lite-v1:0"
+            # --- DORA ---
+            - name: DORA_DEPLOY_JOB_NAMES
+              value: "deploy_prod,deploy-production,deploy_artifact,deploy-artifact,deploy_prd,deploy-prd"
+            - name: DORA_PROD_ENVIRONMENTS
+              value: "production,prod,prd,live"
+            # --- Internal ---
+            - name: INTERNAL_API_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: platformportal-secrets
+                  key: INTERNAL_API_SECRET
+            # --- Feature flags (dev: more features enabled) ---
+            - name: ENABLE_AUTOMATIONS
+              value: "true"
+            - name: ENABLE_JIRA
+              value: "true"
+            - name: ENABLE_CYBERSECURITY
+              value: "false"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi

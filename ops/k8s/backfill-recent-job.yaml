@@ -1,0 +1,53 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dora-backfill-recent
+  namespace: n8n
+spec:
+  # Allow up to 4 hours for completion (7 dates × 30min each + buffer)
+  activeDeadlineSeconds: 14400
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: dora-backfill
+      annotations:
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+      - name: harbor-registry
+      containers:
+      - name: backfill
+        image: harbor.tooling.dp.iskaypet.com/tooling/platformportal:a9f8f5e9
+        command:
+        - node
+        - /app/ops/backfill-recent.js
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: platformportal-secrets
+              key: database-url
+        - name: GITLAB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: platformportal-secrets
+              key: gitlab-token
+        - name: SONARQUBE_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: platformportal-secrets
+              key: sonarqube-token
+        - name: GRAFANA_METRICS_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: platformportal-secrets
+              key: GRAFANA_METRICS_TOKEN
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"

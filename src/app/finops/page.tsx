@@ -1,10 +1,23 @@
+import { getServerSession } from "next-auth";
+import { redirect } from "next/navigation";
+import { authOptions } from "@/lib/auth";
+import { hasSessionMinimumRole } from "@/lib/session-role";
+import { FinOpsWorkspace } from "@/components/finops-workspace";
 
-import { FinOpsDashboard } from "@/components/finops-dashboard";
+export default async function FinOpsPage() {
+  const session = await getServerSession(authOptions);
 
-export default function FinOpsPage() {
-    return (
-        <div className="container mx-auto py-8 space-y-8">
-            <FinOpsDashboard />
-        </div>
-    );
+  if (!session) {
+    redirect("/");
+  }
+
+  if (!hasSessionMinimumRole(session, "desarrolladores")) {
+    redirect("/?forbidden=editor");
+  }
+
+  return (
+    <div className="container mx-auto py-8 space-y-8">
+      <FinOpsWorkspace />
+    </div>
+  );
 }

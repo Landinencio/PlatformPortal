@@ -1,0 +1,24 @@
+{
+  "_comment": "Additional read-only permissions for n8n-cost-reader-role so the Platform Portal infra-live-detector can verify resource existence per environment. Attach this inline policy (or merge into the role's existing policy) in every squad AWS account where infra is created (digital dev/uat/prod, retail, helios, animalis...). All actions are read-only / describe-only.",
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "InfraLiveDetectorReadOnly",
+      "Effect": "Allow",
+      "Action": [
+        "sqs:GetQueueUrl",
+        "sqs:GetQueueAttributes",
+        "sns:ListTopics",
+        "dynamodb:DescribeTable",
+        "rds:DescribeDBInstances",
+        "secretsmanager:ListSecrets",
+        "secretsmanager:DescribeSecret",
+        "s3:ListBucket",
+        "s3:GetBucketLocation",
+        "events:ListRules",
+        "events:DescribeRule"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

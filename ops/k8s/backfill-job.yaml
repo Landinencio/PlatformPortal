@@ -1,0 +1,103 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dora-backfill-gap-apr18-20
+  namespace: n8n
+  labels:
+    app: dora-backfill
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 86400  # 24h max
+  ttlSecondsAfterFinished: 172800  # cleanup after 48h
+  template:
+    metadata:
+      labels:
+        app: dora-backfill
+    spec:
+      restartPolicy: Never
+      serviceAccountName: n8n-webhooks
+      imagePullSecrets:
+        - name: harbor-registry
+      containers:
+        - name: backfill
+          image: alpine:3.19
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c"]
+          args:
+            - |
+              apk add --no-cache coreutils wget
+              
+              echo "=== DORA Multi-Group Backfill Job ==="
+              echo "Start: $BACKFILL_START_DATE"
+              echo "End: $BACKFILL_END_DATE"
+              echo "Started: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+              echo ""
+              
+              PORTAL_URL="http://n8n-webhooks.n8n.svc.cluster.local:3000"
+              SECRET="$INTERNAL_API_SECRET"
+              
+              current="$BACKFILL_START_DATE"
+              end="$BACKFILL_END_DATE"
+              ok=0
+              fail=0
+              total=0
+              
+              while [ "$(date -d "$current" +%s)" -lt "$(date -d "$end" +%s)" ]; do
+                total=$((total + 1))
+                ts=$(date -u +%H:%M:%S)
+                echo -n "[$ts] ($total) $current ... "
+                
+                response=$(wget -qO- --timeout=1800 \
+                  --header="x-internal-secret: $SECRET" \
+                  --header="Content-Type: application/json" \
+                  --post-data="" \
+                  "$PORTAL_URL/api/metrics/snapshot?date=$current" 2>&1 || echo "WGET_ERROR")
+                
+                if echo "$response" | grep -q '"success":true'; then
+                  ok=$((ok + 1))
+                  echo "OK ($ok/$total)"
+                else
+                  fail=$((fail + 1))
+                  echo "FAIL: $(echo "$response" | head -c 120)"
+                fi
+                
+                current=$(date -d "$current + 1 day" +%Y-%m-%d)
+              done
+              
+              echo ""
+              echo "=== Backfill complete ==="
+              echo "Total: $total | OK: $ok | Failed: $fail"
+              echo "Finished: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: platformportal-secrets
+                  key: database-url
+            - name: GITLAB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: platformportal-secrets
+                  key: gitlab-token
+            - name: INTERNAL_API_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: platformportal-secrets
+                  key: INTERNAL_API_SECRET
+            - name: DORA_SNAPSHOT_GROUP_IDS
+              value: "66347331,66419117,110564874,66418532,66418793,66418992,66419397,66417434"
+            - name: DORA_DEPLOY_JOB_NAMES
+              value: "deploy_prod,deploy-production,deploy_artifact,deploy-artifact,deploy_prd,deploy-prd"
+            - name: DORA_PROD_ENVIRONMENTS
+              value: "production,prod,prd,live"
+            - name: BACKFILL_START_DATE
+              value: "2026-04-18"
+            - name: BACKFILL_END_DATE
+              value: "2026-04-21"

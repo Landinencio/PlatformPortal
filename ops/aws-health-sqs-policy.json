@@ -1,0 +1,23 @@
+{
+  "_comment": "Queue policy for the SQS queue `portal-aws-health-events` in dp-tooling (444455556666, eu-west-1). Allows the EventBridge service (events.amazonaws.com) to sqs:SendMessage into the queue, but ONLY when the call originates from the central bus rule's target (SourceArn = the rule on the portal-aws-health bus) and from this account (SourceAccount). Applied via the Policy attribute on the queue (set-queue-attributes); apply-aws-health-eventbridge.sh injects the real queue ARN. This grants EventBridge -> SQS delivery for the central-bus rule only.",
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowEventBridgeToSendMessage",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "events.amazonaws.com"
+      },
+      "Action": "sqs:SendMessage",
+      "Resource": "arn:aws:sqs:eu-west-1:444455556666:portal-aws-health-events",
+      "Condition": {
+        "ArnEquals": {
+          "aws:SourceArn": "arn:aws:events:eu-west-1:444455556666:rule/portal-aws-health/portal-aws-health-to-sqs"
+        },
+        "StringEquals": {
+          "aws:SourceAccount": "444455556666"
+        }
+      }
+    }
+  ]
+}

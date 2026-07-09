@@ -1,0 +1,32 @@
+# Development overrides — namespace platformportal (set by the ArgoCD Application).
+# Same cluster (dp-tooling), different namespace + host. Only what differs from base.
+# Cronjobs stay disabled (base default) — they are prod-only.
+generic-chart:
+  app:
+    # ConfigMap is named after the release (portal-dev).
+    extraEnvVarsCM: portal-dev
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  ingress:
+    hostname: portal.today.dev.tooling.dp.iskaypet.com
+    extraTls:
+      - hosts:
+          - portal.today.dev.tooling.dp.iskaypet.com
+        secretName: portal-dev-tls
+  configMap:
+    NEXTAUTH_URL: https://portal.today.dev.tooling.dp.iskaypet.com
+    # EKS Cost Optimization v2 (spec eks-cost-optimization, Requirement 9.5):
+    # cutover completado — dev renderiza <EksCostDashboard />. Fase 4
+    # (task 20.1) eliminará el flag y todo el árbol legacy.
+    ENABLE_EKS_COST_V2: "true"
+    # Infra Self-Service Hardening v1 (spec infra-self-service-hardening,
+    # design §"Ventana de convivencia"): activar en dev inicia la ventana de
+    # observación de ≥7 días. Con la métrica `outcome=success` verde en
+    # Grafana Cloud/Loki durante ese tiempo se retirará el catálogo estático
+    # (task 13.3). Prod se activa después de la observación.
+    ENABLE_INFRA_HARDENING_V1: "true"

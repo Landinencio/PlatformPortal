@@ -1,0 +1,11 @@
+# Platform Portal CI/CD — consumes the reusable Portal_Template from the Toolkit.
+# Build (Kaniko -> Harbor tooling/platformportal + aux images) -> scan ->
+# deploy_dev (auto, writes tag to argocd/tooling shared-apps/portal-dev) ->
+# tag_release (manual) -> deploy_prod (manual, shared-apps/portal-prod).
+# No more manual `docker build` / `set image`.
+#
+# Tracks the Toolkit's main branch (latest merged Portal_Template).
+include:
+  - project: 'iskaypetcom/sre-infra/tools/cicd/gitlab-ci-toolkit'
+    ref: 'main'
+    file: 'main-portal.yml'

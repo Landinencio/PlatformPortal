@@ -50,11 +50,19 @@ module.exports = {
                     DEFAULT: "hsl(var(--card))",
                     foreground: "hsl(var(--card-foreground))",
                 },
+                success: "hsl(var(--success))",
+                warning: "hsl(var(--warning))",
+                danger: "hsl(var(--danger))",
+                info: "hsl(var(--info))",
             },
             borderRadius: {
                 lg: "var(--radius)",
                 md: "calc(var(--radius) - 2px)",
                 sm: "calc(var(--radius) - 4px)",
+            },
+            fontFamily: {
+                sans: ["var(--font-sans)"],
+                display: ["var(--font-display)"],
             },
             keyframes: {
                 "accordion-down": {
@@ -72,5 +80,5 @@ module.exports = {
             },
         },
     },
-    plugins: [require("tailwindcss-animate")],
+    plugins: [require("tailwindcss-animate"), require("@tailwindcss/typography")],
 }

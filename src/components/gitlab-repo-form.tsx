@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2 } from "lucide-react"
 
 const formSchema = z.object({
+    businessTeam: z.string().min(1, { message: "Please select a team." }),
     name: z.string().min(2, {
         message: "Repository name must be at least 2 characters.",
     }).regex(/^[a-zA-Z0-9-_]+$/, {
@@ -38,6 +39,7 @@ export function GitLabRepoForm() {
     const form = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema),
         defaultValues: {
+            businessTeam: "",
             name: "",
             description: "",
             namespace_id: "",
@@ -77,6 +79,33 @@ export function GitLabRepoForm() {
     return (
         <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                <FormField
+                    control={form.control}
+                    name="businessTeam"
+                    render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Equipo</FormLabel>
+                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                <FormControl>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Selecciona un equipo" />
+                                    </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                    <SelectItem value="digital">Digital</SelectItem>
+                                    <SelectItem value="marktech">MarTech</SelectItem>
+                                    <SelectItem value="retail">Retail</SelectItem>
+                                    <SelectItem value="data">Data</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <FormDescription>
+                                El equipo al que pertenece este repositorio.
+                            </FormDescription>
+                            <FormMessage />
+                        </FormItem>
+                    )}
+                />
+
                 <FormField
                     control={form.control}
                     name="name"
@@ -161,7 +190,7 @@ export function GitLabRepoForm() {
                 )}
 
                 {error && (
-                    <div className="p-4 rounded-md bg-red-50 text-red-900 border border-red-200">
+                    <div className="p-4 rounded-md bg-danger/10 text-danger border border-danger/25">
                         {error}
                     </div>
                 )}

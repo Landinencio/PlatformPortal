@@ -1,0 +1,690 @@
+{
+  "name": "GitLab Repo Creation (Simple: Jira -> GitLab -> Teams)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "create-repo",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "0ad41f43-1fd1-4556-8a42-f2003edbd172",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -656,
+        368
+      ],
+      "webhookId": "e1f2a3b4-c5d6-47e8-89f0-1a2b3c4d5e6f"
+    },
+    {
+      "parameters": {
+        "project": {
+          "__rl": true,
+          "value": "10142",
+          "mode": "id"
+        },
+        "issueType": {
+          "__rl": true,
+          "mode": "id",
+          "value": "10048"
+        },
+        "summary": "=[Portal] New Repo: {{ $('Webhook').item.json.body.name }} — {{ $('Webhook').item.json.body.businessTeam }}",
+        "additionalFields": {
+          "labels": [
+            "SRE",
+            "={{ $('Webhook').item.json.body.businessTeam }}"
+          ]
+        }
+      },
+      "id": "05b6ae59-4d09-42c5-9848-ead848ddcd28",
+      "name": "Jira Software",
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        -448,
+        368
+      ],
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "CgputYowbXNdNhol",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Webhook').item.json.body.template }}",
+                    "rightValue": "go-microservices",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "83d426db-dccf-4c62-940f-9d144282a1d6"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "go-microservices"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Webhook').item.json.body.template }}",
+                    "rightValue": "frontend-headless",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "3071ccc6-5bd9-4b73-929f-1398597f9b49"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "frontend-headless"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Webhook').item.json.body.template }}",
+                    "rightValue": "springboot-microservices",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "2cb74a17-fae5-46a7-81a5-27c9c98e4e37"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "springboot-microservices"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Webhook').item.json.body.template }}",
+                    "rightValue": "fastapi-microservices",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "1df4d349-b27e-440a-8e92-2e7fba0d43d3"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "fastapi-microservices"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Webhook').item.json.body.template }}",
+                    "rightValue": "springboot-library",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "90462516-c98b-49e5-bdd5-935782f8fd4f"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "springboot-library"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "id": "245b0948-fbb3-4715-b19d-83f9b3d56720",
+                    "leftValue": "={{ $('Webhook').item.json.body.template }}",
+                    "rightValue": "headless-template-multi-brand",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "headless-template-multi-brand"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "68ffa395-312b-4c86-9c6b-97aa1d366634",
+      "name": "Switch Template",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        -240,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "number": [
+            {
+              "name": "template_project_id",
+              "value": 61922564
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f8190105-42b8-4f6b-97b2-ac0be8d9525d",
+      "name": "Set Go Template",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        0,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "number": [
+            {
+              "name": "template_project_id",
+              "value": 62552641
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ae3e6d12-e289-4929-815a-a38930fef8de",
+      "name": "Set Frontend Template",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        0,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "number": [
+            {
+              "name": "template_project_id",
+              "value": 66003760
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1b5a7741-9181-4335-9fee-93b724af3c8d",
+      "name": "Set SpringBoot Template",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        0,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "number": [
+            {
+              "name": "template_project_id",
+              "value": 74105964
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4a5245c0-5cd3-4039-8ec5-29d5c09c2a97",
+      "name": "Set FastAPI Template",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        0,
+        624
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "number": [
+            {
+              "name": "template_project_id",
+              "value": 66006940
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d648256f-19ab-41f1-b335-4c747b5e797a",
+      "name": "Set SpringBoot Lib Template",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        0,
+        768
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "number": [
+            {
+              "name": "template_project_id",
+              "value": 77818808
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2f3997f8-88c1-46d0-8881-c3005c0bed64",
+      "name": "Set Headless Template Multi-Brand",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://gitlab.com/api/v4/projects",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "name",
+              "value": "={{ $('Webhook').item.json.body.name }}"
+            },
+            {
+              "name": "namespace_id",
+              "value": "={{ $('Webhook').item.json.body.namespace_id }}"
+            },
+            {
+              "name": "use_custom_template",
+              "value": "true"
+            },
+            {
+              "name": "group_with_project_templates_id",
+              "value": "93744712"
+            },
+            {
+              "name": "template_project_id",
+              "value": "={{ $json.template_project_id }}"
+            },
+            {
+              "name": "default_branch",
+              "value": "main"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "27086d74-4e68-4eab-a3f5-ccf9bbdfc618",
+      "name": "GitLab API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        304,
+        368
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "RFNOC6Ek5h3RSZ2O",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const repoName = $('Webhook').item.json.body.name || 'Unknown Repo';\nconst repoUrl = $('GitLab API').item.json.web_url || '#';\nconst userName = $('Webhook').item.json.body.userName || 'Unknown User';\nconst template = $('Webhook').item.json.body.template || 'Unknown Template';\nconst businessTeam = $('Webhook').item.json.body.businessTeam || 'N/A';\n\nconst card = {\n  type: 'message',\n  attachments: [\n    {\n      contentType: 'application/vnd.microsoft.card.adaptive',\n      content: {\n        $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',\n        type: 'AdaptiveCard',\n        version: '1.4',\n        body: [\n          {\n            type: 'TextBlock',\n            text: '🚀 Nuevo Repositorio Creado',\n            weight: 'Bolder',\n            size: 'Large',\n            color: 'Good',\n          },\n          {\n            type: 'TextBlock',\n            text: repoName,\n            weight: 'Bolder',\n            size: 'Medium',\n            wrap: true\n          },\n          {\n            type: 'FactSet',\n            facts: [\n              { title: 'Solicitante', value: userName },\n              { title: 'Equipo', value: businessTeam },\n              { title: 'Template', value: template },\n              { title: 'URL', value: repoUrl }\n            ]\n          }\n        ],\n        actions: [\n          {\n            type: 'Action.OpenUrl',\n            title: 'Ver en GitLab',\n            url: repoUrl\n          }\n        ]\n      }\n    }\n  ]\n};\n\nreturn [\n  {\n    json: {\n      teamsBody: card\n    }\n  }\n];"
+      },
+      "id": "54cc1487-574d-4954-ac83-abbcbc0d0a48",
+      "name": "Prepare Teams Card",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        512,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://tiendanimalcom.webhook.office.com/webhookb2/8e93475d-c109-47e0-9493-a63a504e4a7d@19e73cc9-78d1-4540-862c-5a89572ef80e/IncomingWebhook/05bd0c8b06fb4464b0492ae7837f90d0/c9014ec0-0431-4f0a-a4f9-9eaf29abcc81/V2SidVcnWOSxXHg0auYtM_EbxOVyTWHyenGrSwonNRJrs1",
+        "sendHeaders": true,
+        "specifyHeaders": "json",
+        "jsonHeaders": "{\n  \"Content-Type\": \"application/json\"\n}\n",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.teamsBody) }}\n",
+        "options": {}
+      },
+      "id": "12224dca-ce77-43b0-95e1-64b4e0069483",
+      "name": "Send Teams Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        704,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "issueKey": "={{ $('Jira Software').item.json.id }}"
+      },
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        704,
+        592
+      ],
+      "id": "fa2330c1-0010-4636-9b8b-4a23b9b48081",
+      "name": "Delete an issue",
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "CgputYowbXNdNhol",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "unit": "minutes"
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        64,
+        960
+      ],
+      "id": "5e45faed-51fc-4569-bff7-242a1d1cc16e",
+      "name": "Wait",
+      "webhookId": "91dec3db-ee18-43f6-bd23-b5365617e90f"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "issueKey": "={{ $('Jira Software').item.json.id }}",
+        "updateFields": {
+          "statusId": {
+            "__rl": true,
+            "value": "61",
+            "mode": "list",
+            "cachedResultName": "Marcar como hecho"
+          }
+        }
+      },
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        -368,
+        720
+      ],
+      "id": "25b13240-ecdd-4e65-995b-21ce66f41f65",
+      "name": "Update an issue",
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "CgputYowbXNdNhol",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Jira Software",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Jira Software": {
+      "main": [
+        [
+          {
+            "node": "Switch Template",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Update an issue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch Template": {
+      "main": [
+        [
+          {
+            "node": "Set Go Template",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set Frontend Template",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set SpringBoot Template",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set FastAPI Template",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set SpringBoot Lib Template",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set Headless Template Multi-Brand",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Go Template": {
+      "main": [
+        [
+          {
+            "node": "GitLab API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Frontend Template": {
+      "main": [
+        [
+          {
+            "node": "GitLab API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set SpringBoot Template": {
+      "main": [
+        [
+          {
+            "node": "GitLab API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set FastAPI Template": {
+      "main": [
+        [
+          {
+            "node": "GitLab API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set SpringBoot Lib Template": {
+      "main": [
+        [
+          {
+            "node": "GitLab API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Headless Template Multi-Brand": {
+      "main": [
+        [
+          {
+            "node": "GitLab API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GitLab API": {
+      "main": [
+        [
+          {
+            "node": "Prepare Teams Card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Teams Card": {
+      "main": [
+        [
+          {
+            "node": "Send Teams Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Delete an issue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update an issue": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "82f8df04-2ea6-4fef-8a87-6a28554f6666",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "c52849af140fecdfb0c6d81c4296e78a8cded6ecf6ac196569f43a8812b332a0"
+  },
+  "id": "emJttnc8VKjnWop1",
+  "tags": []
+}

@@ -1,0 +1,27 @@
+# Production overrides — namespace n8n (set by the ArgoCD Application destination).
+# Only what differs from values.yaml (the common base).
+generic-chart:
+  app:
+    # ConfigMap is named after the release (portal-prod).
+    extraEnvVarsCM: portal-prod
+  ingress:
+    hostname: portal.today.tooling.dp.iskaypet.com
+    extraTls:
+      - hosts:
+          - portal.today.tooling.dp.iskaypet.com
+        secretName: n8n-portal-tls
+  configMap:
+    NEXTAUTH_URL: https://portal.today.tooling.dp.iskaypet.com
+    # Prod-deploy → Teams notification is emitted ONLY from prod (dev/prod have
+    # separate DBs, so the DB dedup does not cross environments).
+    DEPLOY_NOTIFY_ENABLED: "true"
+    # EKS Cost Optimization v2 cutover (spec eks-cost-optimization, task 17.1,
+    # Requirement 9.5): flag ENABLED in prod so `/finops` "EKS Allocation" tab
+    # renders <EksCostDashboard /> (new node-centric view) instead of the
+    # legacy <K8sAllocationDashboard />. Legacy alias `/api/finops/k8s-allocation`
+    # remains alive with `Deprecation: true` header for two releases (see task
+    # 15.3). Fase 4 (task 20.1) removes the flag entirely and the legacy code.
+    ENABLE_EKS_COST_V2: "true"
+  # Cronjobs (snapshots, digest, aws-health, lighthouse) run ONLY in prod.
+  cronjobs:
+    enabled: true

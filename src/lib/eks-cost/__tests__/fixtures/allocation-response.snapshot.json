@@ -1,0 +1,420 @@
+{
+  "generatedAt": "2026-06-01T09:00:00.000Z",
+  "totalMonthlyEur": 6555,
+  "totalNodeCount": 40,
+  "totalSpotCoveragePct": 47.5,
+  "totalEstimatedSavingsEur": 325,
+  "environments": [
+    {
+      "name": "dev",
+      "cluster": "dp-dev",
+      "monthlyCostEur": 700,
+      "nodeCount": 10,
+      "spotCount": 5,
+      "spotCoveragePct": 50,
+      "nodegroups": [
+        {
+          "name": "main",
+          "cluster": "dp-dev",
+          "environment": "dev",
+          "nodeCount": 5,
+          "spotCount": 0,
+          "spotCoveragePct": 0,
+          "monthlyCostEur": 500,
+          "avgNodeCostEur": 100,
+          "overprovisioningEur": 150,
+          "excessNodes": 1
+        },
+        {
+          "name": "spot-4xl",
+          "cluster": "dp-dev",
+          "environment": "dev",
+          "nodeCount": 5,
+          "spotCount": 5,
+          "spotCoveragePct": 100,
+          "monthlyCostEur": 200,
+          "avgNodeCostEur": 40,
+          "overprovisioningEur": 40,
+          "excessNodes": 1
+        }
+      ]
+    },
+    {
+      "name": "uat",
+      "cluster": "dp-uat",
+      "monthlyCostEur": 575,
+      "nodeCount": 7,
+      "spotCount": 3,
+      "spotCoveragePct": 42.9,
+      "nodegroups": [
+        {
+          "name": "main",
+          "cluster": "dp-uat",
+          "environment": "uat",
+          "nodeCount": 4,
+          "spotCount": 0,
+          "spotCoveragePct": 0,
+          "monthlyCostEur": 440,
+          "avgNodeCostEur": 110,
+          "overprovisioningEur": 110,
+          "excessNodes": 1
+        },
+        {
+          "name": "spot-4xl",
+          "cluster": "dp-uat",
+          "environment": "uat",
+          "nodeCount": 3,
+          "spotCount": 3,
+          "spotCoveragePct": 100,
+          "monthlyCostEur": 135,
+          "avgNodeCostEur": 45,
+          "overprovisioningEur": 0,
+          "excessNodes": 0
+        }
+      ]
+    },
+    {
+      "name": "prod",
+      "cluster": "dp-prd",
+      "monthlyCostEur": 5280,
+      "nodeCount": 23,
+      "spotCount": 11,
+      "spotCoveragePct": 47.8,
+      "nodegroups": [
+        {
+          "name": "main",
+          "cluster": "dp-prd",
+          "environment": "prod",
+          "nodeCount": 10,
+          "spotCount": 0,
+          "spotCoveragePct": 0,
+          "monthlyCostEur": 1500,
+          "avgNodeCostEur": 150,
+          "overprovisioningEur": 300,
+          "excessNodes": 2
+        },
+        {
+          "name": "spot-4xl",
+          "cluster": "dp-prd",
+          "environment": "prod",
+          "nodeCount": 11,
+          "spotCount": 11,
+          "spotCoveragePct": 100,
+          "monthlyCostEur": 660,
+          "avgNodeCostEur": 60,
+          "overprovisioningEur": 180,
+          "excessNodes": 3
+        },
+        {
+          "name": "gpu",
+          "cluster": "dp-prd",
+          "environment": "prod",
+          "nodeCount": 2,
+          "spotCount": 0,
+          "spotCoveragePct": 0,
+          "monthlyCostEur": 3120,
+          "avgNodeCostEur": 1560,
+          "overprovisioningEur": 0,
+          "excessNodes": 0
+        }
+      ]
+    }
+  ],
+  "nodegroups": [
+    {
+      "name": "main",
+      "cluster": "dp-dev",
+      "environment": "dev",
+      "nodeCount": 5,
+      "spotCount": 0,
+      "spotCoveragePct": 0,
+      "monthlyCostEur": 500,
+      "avgNodeCostEur": 100,
+      "overprovisioningEur": 150,
+      "excessNodes": 1
+    },
+    {
+      "name": "spot-4xl",
+      "cluster": "dp-dev",
+      "environment": "dev",
+      "nodeCount": 5,
+      "spotCount": 5,
+      "spotCoveragePct": 100,
+      "monthlyCostEur": 200,
+      "avgNodeCostEur": 40,
+      "overprovisioningEur": 40,
+      "excessNodes": 1
+    },
+    {
+      "name": "main",
+      "cluster": "dp-uat",
+      "environment": "uat",
+      "nodeCount": 4,
+      "spotCount": 0,
+      "spotCoveragePct": 0,
+      "monthlyCostEur": 440,
+      "avgNodeCostEur": 110,
+      "overprovisioningEur": 110,
+      "excessNodes": 1
+    },
+    {
+      "name": "spot-4xl",
+      "cluster": "dp-uat",
+      "environment": "uat",
+      "nodeCount": 3,
+      "spotCount": 3,
+      "spotCoveragePct": 100,
+      "monthlyCostEur": 135,
+      "avgNodeCostEur": 45,
+      "overprovisioningEur": 0,
+      "excessNodes": 0
+    },
+    {
+      "name": "main",
+      "cluster": "dp-prd",
+      "environment": "prod",
+      "nodeCount": 10,
+      "spotCount": 0,
+      "spotCoveragePct": 0,
+      "monthlyCostEur": 1500,
+      "avgNodeCostEur": 150,
+      "overprovisioningEur": 300,
+      "excessNodes": 2
+    },
+    {
+      "name": "spot-4xl",
+      "cluster": "dp-prd",
+      "environment": "prod",
+      "nodeCount": 11,
+      "spotCount": 11,
+      "spotCoveragePct": 100,
+      "monthlyCostEur": 660,
+      "avgNodeCostEur": 60,
+      "overprovisioningEur": 180,
+      "excessNodes": 3
+    },
+    {
+      "name": "gpu",
+      "cluster": "dp-prd",
+      "environment": "prod",
+      "nodeCount": 2,
+      "spotCount": 0,
+      "spotCoveragePct": 0,
+      "monthlyCostEur": 3120,
+      "avgNodeCostEur": 1560,
+      "overprovisioningEur": 0,
+      "excessNodes": 0
+    }
+  ],
+  "squads": [
+    {
+      "name": "digital",
+      "monthlyCostEur": 2400,
+      "workloadCount": 12,
+      "overprovisioningEur": 320
+    },
+    {
+      "name": "retail",
+      "monthlyCostEur": 1800,
+      "workloadCount": 8,
+      "overprovisioningEur": 240
+    },
+    {
+      "name": "data",
+      "monthlyCostEur": 1200,
+      "workloadCount": 4,
+      "overprovisioningEur": 100
+    },
+    {
+      "name": "sre",
+      "monthlyCostEur": 900,
+      "workloadCount": 6,
+      "overprovisioningEur": 120
+    },
+    {
+      "name": "sin asignar",
+      "monthlyCostEur": 255,
+      "workloadCount": 3,
+      "overprovisioningEur": 0
+    }
+  ],
+  "workloads": [
+    {
+      "cluster": "dp-prd",
+      "environment": "prod",
+      "namespace": "oms",
+      "workload": "oms-orders-api",
+      "nodegroup": "main",
+      "squad": "digital",
+      "podCount": 4,
+      "cpuRequestCores": 2,
+      "memRequestBytes": 4294967296,
+      "cpuUsageP95Cores": 0.6,
+      "memUsageP95Bytes": 1610612736,
+      "monthlyCostEur": 320
+    },
+    {
+      "cluster": "dp-prd",
+      "environment": "prod",
+      "namespace": "checkout",
+      "workload": "checkout-api",
+      "nodegroup": "main",
+      "squad": "digital",
+      "podCount": 3,
+      "cpuRequestCores": 1.5,
+      "memRequestBytes": 3221225472,
+      "cpuUsageP95Cores": 0.4,
+      "memUsageP95Bytes": 1073741824,
+      "monthlyCostEur": 210
+    },
+    {
+      "cluster": "dp-prd",
+      "environment": "prod",
+      "namespace": "customers",
+      "workload": "customers-api",
+      "nodegroup": "spot-4xl",
+      "squad": "retail",
+      "podCount": 6,
+      "cpuRequestCores": 3,
+      "memRequestBytes": 6442450944,
+      "cpuUsageP95Cores": 2.1,
+      "memUsageP95Bytes": 4831838208,
+      "monthlyCostEur": 240
+    },
+    {
+      "cluster": "dp-dev",
+      "environment": "dev",
+      "namespace": "products",
+      "workload": "products-api",
+      "nodegroup": "main",
+      "squad": "digital",
+      "podCount": 2,
+      "cpuRequestCores": 1,
+      "memRequestBytes": 2147483648,
+      "cpuUsageP95Cores": 0.2,
+      "memUsageP95Bytes": 536870912,
+      "monthlyCostEur": 60
+    },
+    {
+      "cluster": "dp-uat",
+      "environment": "uat",
+      "namespace": "payments",
+      "workload": "payments-api",
+      "nodegroup": "main",
+      "squad": "digital",
+      "podCount": 2,
+      "cpuRequestCores": 1,
+      "memRequestBytes": 2147483648,
+      "cpuUsageP95Cores": 0.3,
+      "memUsageP95Bytes": 805306368,
+      "monthlyCostEur": 90
+    },
+    {
+      "cluster": "dp-prd",
+      "environment": "prod",
+      "namespace": "data-science",
+      "workload": "training-worker",
+      "nodegroup": "gpu",
+      "squad": "data",
+      "podCount": 2,
+      "cpuRequestCores": 8,
+      "memRequestBytes": 34359738368,
+      "cpuUsageP95Cores": 6.5,
+      "memUsageP95Bytes": 30064771072,
+      "monthlyCostEur": 1200
+    },
+    {
+      "cluster": "dp-prd",
+      "environment": "prod",
+      "namespace": "argocd",
+      "workload": "argocd-repo-server",
+      "nodegroup": "main",
+      "squad": "sre",
+      "podCount": 2,
+      "cpuRequestCores": 0.5,
+      "memRequestBytes": 1073741824,
+      "cpuUsageP95Cores": 0.1,
+      "memUsageP95Bytes": 268435456,
+      "monthlyCostEur": 45
+    }
+  ],
+  "recommendations": [
+    {
+      "cluster": "dp-prd",
+      "environment": "prod",
+      "namespace": "oms",
+      "workload": "oms-orders-api",
+      "nodegroup": "main",
+      "squad": "digital",
+      "kind": "over-cpu",
+      "currentRequest": { "value": 2, "k8s": "2" },
+      "recommendedRequest": { "value": 1.2, "k8s": "1200m" },
+      "estimatedSavingsEur": 120,
+      "unitYamlBlock": "# EKS Cost recommendation for oms/oms-orders-api\n# reason: over-cpu\nresources:\n  requests:\n    cpu: \"1200m\"\n    memory: \"4Gi\"\n  limits:\n    memory: \"4Gi\"",
+      "reason": "over-cpu (cpu)"
+    },
+    {
+      "cluster": "dp-prd",
+      "environment": "prod",
+      "namespace": "oms",
+      "workload": "oms-orders-api",
+      "nodegroup": "main",
+      "squad": "digital",
+      "kind": "over-mem",
+      "currentRequest": { "value": 4294967296, "k8s": "4Gi" },
+      "recommendedRequest": { "value": 2469606195, "k8s": "2.3Gi" },
+      "estimatedSavingsEur": 80,
+      "unitYamlBlock": "# EKS Cost recommendation for oms/oms-orders-api\n# reason: over-mem\nresources:\n  requests:\n    cpu: \"2\"\n    memory: \"2.3Gi\"\n  limits:\n    memory: \"2.3Gi\"",
+      "reason": "over-mem (memory)"
+    },
+    {
+      "cluster": "dp-prd",
+      "environment": "prod",
+      "namespace": "checkout",
+      "workload": "checkout-api",
+      "nodegroup": "main",
+      "squad": "digital",
+      "kind": "over-cpu",
+      "currentRequest": { "value": 1.5, "k8s": "1500m" },
+      "recommendedRequest": { "value": 0.8, "k8s": "800m" },
+      "estimatedSavingsEur": 100,
+      "unitYamlBlock": "# EKS Cost recommendation for checkout/checkout-api\n# reason: over-cpu\nresources:\n  requests:\n    cpu: \"800m\"\n    memory: \"3Gi\"\n  limits:\n    memory: \"3Gi\"",
+      "reason": "over-cpu (cpu)"
+    },
+    {
+      "cluster": "dp-prd",
+      "environment": "prod",
+      "namespace": "customers",
+      "workload": "customers-api",
+      "nodegroup": "spot-4xl",
+      "squad": "retail",
+      "kind": "under-mem",
+      "currentRequest": { "value": 6442450944, "k8s": "6Gi" },
+      "recommendedRequest": { "value": 6871947674, "k8s": "6.4Gi" },
+      "estimatedSavingsEur": 0,
+      "unitYamlBlock": "# EKS Cost recommendation for customers/customers-api\n# reason: under-mem\nresources:\n  requests:\n    cpu: \"500m\"\n    memory: \"6.4Gi\"\n  limits:\n    memory: \"6.4Gi\"",
+      "reason": "under-mem (memory)"
+    },
+    {
+      "cluster": "dp-prd",
+      "environment": "prod",
+      "namespace": "argocd",
+      "workload": "argocd-repo-server",
+      "nodegroup": "main",
+      "squad": "sre",
+      "kind": "over-cpu",
+      "currentRequest": { "value": 0.5, "k8s": "500m" },
+      "recommendedRequest": { "value": 0.2, "k8s": "200m" },
+      "estimatedSavingsEur": 25,
+      "unitYamlBlock": "# EKS Cost recommendation for argocd/argocd-repo-server\n# reason: over-cpu\nresources:\n  requests:\n    cpu: \"200m\"\n    memory: \"1Gi\"\n  limits:\n    memory: \"1Gi\"",
+      "reason": "over-cpu (cpu)"
+    }
+  ],
+  "warnings": [
+    {
+      "code": "vpa-missing",
+      "message": "VPA recommendations missing for 42% of workloads",
+      "source": "rightsizing.fetchRecommendations"
+    }
+  ]
+}

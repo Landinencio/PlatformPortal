@@ -1,0 +1,408 @@
+# Platform Portal — COMMON values for the corporate generic-chart (dependency).
+# Only what is shared by every environment lives here. Per-environment specifics
+# (host, NEXTAUTH_URL, TLS secret, ConfigMap name, cronjobs on/off, scale) go in
+# values-prod.yaml / values-dev.yaml. Everything is nested under "generic-chart".
+
+generic-chart:
+  app:
+    name: portal
+    kind: Deployment
+    replicaCount: 1
+
+    image:
+      registry: harbor.tooling.dp.iskaypet.com
+      repository: tooling/platformportal
+      # tag is written by the CI/CD pipeline into the GitOps repo per environment.
+      tag: "latest"
+      pullPolicy: Always
+      pullSecrets:
+        - harbor-registry
+
+    # Next.js standalone listens on 3000.
+    containerPorts:
+      - name: http
+        containerPort: 3000
+
+    # The portal image runs as the default node user and writes to .next/cache;
+    # the strict Bitnami security context (readOnlyRootFilesystem/runAsNonRoot)
+    # would break it. Can be tightened later.
+    podSecurityContext:
+      enabled: false
+    containerSecurityContext:
+      enabled: false
+
+    # No node affinity needed in tooling (nodes have no `department` label).
+    affinity: {}
+    podAntiAffinityPreset: ""
+
+    livenessProbe:
+      enabled: true
+      httpGet:
+        path: /api/health
+        port: 3000
+      initialDelaySeconds: 15
+      periodSeconds: 30
+      timeoutSeconds: 5
+      failureThreshold: 3
+    readinessProbe:
+      enabled: true
+      httpGet:
+        path: /api/health
+        port: 3000
+      initialDelaySeconds: 5
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 3
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+    podAnnotations:
+      k8s.grafana.com/scrape: "true"
+      k8s.grafana.com/metrics_path: /api/synthetics/metrics
+      k8s.grafana.com/metrics_portNumber: "3000"
+
+    # The chart names the ConfigMap after the release (portal-dev / portal-prod),
+    # so extraEnvVarsCM is set per environment in values-{dev,prod}.yaml.
+    # Sensitive env materialized by ESO into this secret (see secret_manager).
+    extraEnvVarsSecret: portal-env
+
+  # ServiceAccount with IRSA (reused portal role, with Secrets Manager read).
+  serviceAccount:
+    create: true
+    name: portal-sa
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::444455556666:role/portal-inventory-irsa
+
+  service:
+    type: ClusterIP
+    ports:
+      - name: http
+        port: 3000
+        targetPort: http
+        protocol: TCP
+
+  # Ingress: common bits (class, path, annotations). The host + TLS secret are
+  # per environment (values-{dev,prod}.yaml).
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    path: /
+    pathType: Prefix
+    service:
+      portName: http
+    # host-derived TLS disabled; each env pins its real secret via extraTls.
+    tls: false
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+      nginx.ingress.kubernetes.io/affinity: cookie
+      nginx.ingress.kubernetes.io/proxy-body-size: "25m"
+      nginx.ingress.kubernetes.io/proxy-buffer-size: 256k
+      nginx.ingress.kubernetes.io/proxy-buffers-number: "4"
+      nginx.ingress.kubernetes.io/session-cookie-change-on-failure: "true"
+      nginx.ingress.kubernetes.io/session-cookie-max-age: "3600"
+      nginx.ingress.kubernetes.io/session-cookie-name: PORTALSESSION
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+
+  # NetworkPolicy off (tooling has cross-namespace traffic to n8n/sonarqube/etc.).
+  networkPolicy:
+    enabled: false
+
+  # --- External Secrets (same in every environment) ---
+  # ESO materializes the secret `portal-env` consumed via extraEnvVarsSecret.
+  # secretKey == final env var name (no hyphens) → envFrom injects them directly.
+  secret_manager:
+    enabled: true
+    region: eu-west-1
+    targetSecretName: portal-env
+    resources:
+      - variable_name: DATABASE_URL
+        sm_name: dp/tooling/portal_db
+        property: url
+      - variable_name: GITLAB_TOKEN
+        sm_name: dp/tooling/portal_gitlab
+        property: token
+      - variable_name: SONARQUBE_TOKEN
+        sm_name: dp/tooling/portal_sonarqube
+        property: token
+      - variable_name: GRAFANA_TOKEN
+        sm_name: dp/tooling/portal_grafana
+        property: token
+      - variable_name: AWX_TOKEN
+        sm_name: dp/tooling/portal_awx
+        property: token
+      - variable_name: INTERNAL_API_SECRET
+        sm_name: dp/tooling/portal_internal
+        property: secret
+      - variable_name: JIRA_API_TOKEN
+        sm_name: dp/tooling/portal_jira
+        property: token
+      - variable_name: TEAMS_WEBHOOK_URL
+        sm_name: dp/tooling/portal_teams
+        property: sre_webhook
+      - variable_name: FINOPS_TEAMS_WEBHOOK_URL
+        sm_name: dp/tooling/portal_teams
+        property: finops_webhook
+      - variable_name: DEPLOY_TEAMS_WEBHOOK_URL
+        sm_name: dp/tooling/portal_teams
+        property: deploy_webhook
+      - variable_name: AWS_HEALTH_QUEUE_URL
+        sm_name: dp/tooling/portal_aws_health
+        property: queue_url
+      - variable_name: AZURE_AD_CLIENT_ID
+        sm_name: dp/tooling/portal_azure
+        property: client_id
+      - variable_name: AZURE_AD_CLIENT_SECRET
+        sm_name: dp/tooling/portal_azure
+        property: client_secret
+      - variable_name: NEXTAUTH_SECRET
+        sm_name: dp/tooling/portal_nextauth
+        property: secret
+      - variable_name: GRAFANA_METRICS_TOKEN
+        sm_name: dp/tooling/portal_grafana_metrics
+        property: token
+      - variable_name: AZURE_AD_GRAPH_CLIENT_ID
+        sm_name: dp/tooling/portal_graph
+        property: client_id
+      - variable_name: AZURE_AD_GRAPH_CLIENT_SECRET
+        sm_name: dp/tooling/portal_graph
+        property: client_secret
+
+  # Non-sensitive env shared by every environment → ConfigMap (portal-dev/-prod).
+  # NEXTAUTH_URL is per environment (values-{dev,prod}.yaml).
+  configMap:
+    AZURE_AD_TENANT_ID: 19e73cc9-78d1-4540-862c-5a89572ef80e
+    N8N_INTERNAL_URL: http://n8n.n8n.svc.cluster.local
+    N8N_WEBHOOK_URL: http://n8n.n8n.svc.cluster.local/webhook/create-repo
+    N8N_ONBOARDING_WEBHOOK: http://n8n.n8n.svc.cluster.local/webhook/user-onboarding
+    N8N_FINOPS_WEBHOOK: http://n8n.n8n.svc.cluster.local/webhook/finops-costs
+    N8N_FINOPS_ATHENA_WEBHOOK: http://n8n.n8n.svc.cluster.local/webhook/finops-athena
+    AWX_API: https://awx-ansible.tooling.dp.iskaypet.com/api/v2
+    GRAFANA_STACK_URL: https://iskaylog.grafana.net
+    GRAFANA_METRICS_URL: https://prometheus-prod-24-prod-eu-west-2.grafana.net/api/prom
+    GRAFANA_METRICS_USERNAME: "1290143"
+    FINOPS_DIGEST_MODE: split
+    SONARQUBE_URL: http://sonarqube-sonarqube.sonarqube.svc.cluster.local:9000/api
+    GITLAB_URL: https://gitlab.com
+    JIRA_BASE_URL: https://iskaypet.atlassian.net
+    JIRA_EMAIL: ruben.landin@iskaypet.com
+    AWS_REGION: eu-west-1
+    AWS_BEDROCK_REGION: eu-west-1
+    AWS_BEDROCK_MODEL_ID: eu.anthropic.claude-sonnet-4-20250514-v1:0
+    INFRA_AGENT_MODEL_ID: eu.anthropic.claude-sonnet-4-20250514-v1:0
+    INFRA_AGENT_SKIP_ROLE: "true"
+    INFRA_AGENT_REGION: eu-west-1
+    FINOPS_CHAT_MODEL_ID: eu.anthropic.claude-sonnet-4-20250514-v1:0
+    FINOPS_CHAT_SKIP_ROLE: "true"
+    FINOPS_ADVISOR_MODEL_ID: eu.anthropic.claude-sonnet-4-20250514-v1:0
+    FINOPS_ADVISOR_SKIP_ROLE: "true"
+    DORA_MAX_LEAD_TIME_HOURS: "2160"
+    DORA_DF_ANOMALY_THRESHOLD: "50"
+    DORA_MIN_CORRELATION_CONFIDENCE: "0.7"
+    K8S_INFRA_NAMESPACES: "kube-system,kube-public,kube-node-lease,cert-manager,ingress-nginx,monitoring,logging,argocd,flux-system"
+    SONAR_MAX_PAGES: "50"
+    DORA_DEPLOY_JOB_NAMES: "deploy_prod,deploy-production"
+    DORA_FAILURE_WINDOW_HOURS: "24"
+    DORA_HOTFIX_BRANCH_PREFIXES: "hotfix/,hotfix-,fix/,bugfix/"
+    DORA_HOTFIX_LABELS: "hotfix,bug,incident"
+    DORA_MTTR_LOOKBACK_DAYS: "14"
+    DORA_PROD_ENVIRONMENTS: "production,prod"
+    DORA_ROLLBACK_BRANCH_PREFIXES: "rollback/,revert/"
+    DORA_ROLLBACK_LABELS: "rollback,revert"
+    GRAFANA_ARGO_CLUSTER_FALLBACK_LABEL: "cluster"
+    GRAFANA_ARGO_CLUSTER_LABEL: "k8s_cluster_name"
+    GRAFANA_ARGO_DEST_NAMESPACE_LABEL: "dest_namespace"
+    GRAFANA_ARGO_FAILURE_PHASES: "Failed,Error"
+    GRAFANA_ARGO_PRODUCTION_CLUSTER_REGEX: "prod"
+    GRAFANA_ARGO_PRODUCTION_ONLY: "true"
+    GRAFANA_ARGO_REPO_LABEL: "repo"
+    GRAFANA_ARGO_SUCCESS_PHASES: "Succeeded"
+    NEXT_PUBLIC_FINOPS_RESELLER_DISCOUNT: "9000"
+    # EKS Cost Optimization v2: gate for the new `/finops` "EKS Allocation"
+    # dashboard (spec eks-cost-optimization, Requirement 9.5). Default off;
+    # dev flips it in Fase 3, prod in Fase 4 (task 17.1).
+    ENABLE_EKS_COST_V2: "false"
+
+  # --- CronJobs ---
+  # Defined here (shared definition) but DISABLED by default. Only prod enables
+  # them (values-prod.yaml) — they are production tasks and target the prod
+  # service (portal-prod.n8n). All jobs inherit env (ConfigMap) + ESO secret.
+  cronjobs:
+    enabled: false
+    jobs:
+      # ---- curl/alpine jobs hitting internal portal endpoints (x-internal-secret) ----
+      - name: aws-health-sync
+        schedule: "*/15 * * * *"
+        image: curlimages/curl:latest
+        restartPolicy: Never
+        command:
+          - /bin/sh
+          - -c
+          - |
+            STATUS=$(curl -X POST \
+              -H "Content-Type: application/json" \
+              -H "x-internal-secret: ${INTERNAL_API_SECRET}" \
+              -w "%{http_code}" -s -o /tmp/response.json --max-time 120 \
+              http://portal-prod.n8n.svc.cluster.local:3000/api/aws-health/sync)
+            echo "HTTP $STATUS"; cat /tmp/response.json
+            [ "$STATUS" = "200" ] || { echo "ERROR aws-health-sync $STATUS"; exit 1; }
+      - name: infra-live-check
+        schedule: "*/10 * * * *"
+        image: curlimages/curl:latest
+        restartPolicy: Never
+        command:
+          - /bin/sh
+          - -c
+          - |
+            STATUS=$(curl -X POST \
+              -H "Content-Type: application/json" \
+              -H "x-internal-secret: ${INTERNAL_API_SECRET}" \
+              -w "%{http_code}" -s -o /tmp/response.json --max-time 300 \
+              http://portal-prod.n8n.svc.cluster.local:3000/api/infra-requests/live-check)
+            echo "HTTP $STATUS"; cat /tmp/response.json
+            [ "$STATUS" = "200" ] || { echo "ERROR infra-live-check $STATUS"; exit 1; }
+      - name: dora-metrics-snapshot
+        schedule: "0 18 * * *"
+        image: curlimages/curl:latest
+        restartPolicy: Never
+        command:
+          - /bin/sh
+          - -c
+          - |
+            STATUS=$(curl -X POST \
+              -H "Content-Type: application/json" \
+              -H "x-internal-secret: ${INTERNAL_API_SECRET}" \
+              -w "%{http_code}" -s -o /tmp/response.json --max-time 2000 \
+              http://portal-prod.n8n.svc.cluster.local:3000/api/metrics/snapshot-all)
+            echo "HTTP $STATUS"; cat /tmp/response.json
+            { [ "$STATUS" = "200" ] || [ "$STATUS" = "207" ]; } || { echo "ERROR snapshot $STATUS"; exit 1; }
+      - name: finops-daily-digest
+        schedule: "20 10 * * *"
+        timezone: Europe/Madrid
+        image: curlimages/curl:latest
+        restartPolicy: Never
+        command:
+          - /bin/sh
+          - -c
+          - |
+            STATUS=$(curl -X POST \
+              -H "Content-Type: application/json" \
+              -H "x-internal-secret: ${INTERNAL_API_SECRET}" \
+              -w "%{http_code}" -s -o /tmp/response.json --max-time 300 \
+              http://portal-prod.n8n.svc.cluster.local:3000/api/finops/daily-digest)
+            echo "HTTP $STATUS"; cat /tmp/response.json
+            [ "$STATUS" = "200" ] || { echo "ERROR finops-daily-digest $STATUS"; exit 1; }
+      - name: k8s-metrics-snapshot
+        schedule: "0 19 * * *"
+        image: alpine:3.19
+        restartPolicy: Never
+        command:
+          - sh
+          - -c
+          - |
+            apk add --no-cache wget
+            SNAPSHOT_DATE=$(date -d "yesterday" +%Y-%m-%d)
+            resp=$(wget -qO- --timeout=1500 \
+              --header="x-internal-secret: $INTERNAL_API_SECRET" \
+              --header="Content-Type: application/json" --post-data="" \
+              "http://portal-prod.n8n.svc.cluster.local:3000/api/metrics/k8s-snapshot?date=$SNAPSHOT_DATE" 2>&1 || echo WGET_ERROR)
+            echo "$resp" | grep -q '"success":true' || { echo "FAIL: $resp" | head -c 300; exit 1; }
+            echo "OK k8s snapshot $SNAPSHOT_DATE"
+      # ---- mr-metrics: own image ----
+      - name: mr-metrics-snapshot
+        schedule: "0 4 * * *"
+        image: harbor.tooling.dp.iskaypet.com/tooling/mr-metrics-snapshot:latest
+        restartPolicy: Never
+        command: ["node", "/app/mr-metrics-snapshot.js"]
+        env:
+          GITLAB_URL: https://gitlab.com
+      # ---- lighthouse: own image; targets-refresh + 5 per-brand scans ----
+      - name: lighthouse-targets-refresh
+        schedule: "0 22 * * *"
+        image: harbor.tooling.dp.iskaypet.com/tooling/lighthouse-scanner:latest
+        restartPolicy: Never
+        command: ["node", "/app/lighthouse-targets-refresh.js"]
+        env:
+          MAX_PER_TYPE: "8"
+          MAX_TOTAL_PER_BRAND: "50"
+      - name: lighthouse-animalis
+        schedule: "0 3 */2 * *"
+        image: harbor.tooling.dp.iskaypet.com/tooling/lighthouse-scanner:latest
+        restartPolicy: Never
+        command: ["node", "/app/lighthouse-scan.js"]
+        env:
+          MONITOR_ID: "1"
+          # Raised from default 50 to cover the curated CSV per brand
+          # (largest brand kiwoko-es ~73 routes after ingest). See spec
+          # lighthouse-url-expansion (Req 11).
+          MAX_ROUTES_PER_BRAND: "120"
+      - name: lighthouse-kiwoko-es
+        schedule: "0 3 */2 * *"
+        image: harbor.tooling.dp.iskaypet.com/tooling/lighthouse-scanner:latest
+        restartPolicy: Never
+        command: ["node", "/app/lighthouse-scan.js"]
+        env:
+          MONITOR_ID: "2"
+          MAX_ROUTES_PER_BRAND: "120"
+      - name: lighthouse-kiwoko-pt
+        schedule: "0 3 */2 * *"
+        image: harbor.tooling.dp.iskaypet.com/tooling/lighthouse-scanner:latest
+        restartPolicy: Never
+        command: ["node", "/app/lighthouse-scan.js"]
+        env:
+          MONITOR_ID: "3"
+          MAX_ROUTES_PER_BRAND: "120"
+      - name: lighthouse-tiendanimal-es
+        schedule: "0 3 */2 * *"
+        image: harbor.tooling.dp.iskaypet.com/tooling/lighthouse-scanner:latest
+        restartPolicy: Never
+        command: ["node", "/app/lighthouse-scan.js"]
+        env:
+          MONITOR_ID: "4"
+          MAX_ROUTES_PER_BRAND: "120"
+      - name: lighthouse-tiendanimal-pt
+        schedule: "0 3 */2 * *"
+        image: harbor.tooling.dp.iskaypet.com/tooling/lighthouse-scanner:latest
+        restartPolicy: Never
+        command: ["node", "/app/lighthouse-scan.js"]
+        env:
+          MONITOR_ID: "5"
+          MAX_ROUTES_PER_BRAND: "120"
+      # ---- ai-portal-explorer: own image (ops/Dockerfile.portal-explorer, Playwright) ----
+      # Read-only QA crawl of the portal under every RBAC role (synthetic sessions),
+      # deterministic anomaly detection + Bedrock triage. See spec ai-portal-explorer.
+      # Schedule: daily at 02:30 Europe/Madrid (off-peak; gives a daily regression
+      # baseline, while the Bedrock budget caps per-run cost). No collision with the
+      # other jobs (lighthouse 03:00, mr-metrics 04:00, snapshots 18:00/19:00).
+      # concurrencyPolicy Forbid: never overlap a previous still-running crawl.
+      # activeDeadlineSeconds 3600: hard 1h cap so a stuck crawl cannot run forever.
+      # envFrom the ESO secret `portal-env` is injected into every cronjob by the
+      # chart (secret_manager.targetSecretName below) — the job inherits NEXTAUTH_SECRET,
+      # INTERNAL_API_SECRET, DATABASE_URL, etc. from it.
+      - name: ai-portal-explorer
+        schedule: "30 2 * * *"
+        timezone: Europe/Madrid
+        image: harbor.tooling.dp.iskaypet.com/tooling/portal-explorer:latest
+        restartPolicy: Never
+        concurrencyPolicy: Forbid
+        activeDeadlineSeconds: 3600
+        # No `command:` override — the job uses the image's CMD
+        # (`npx tsx ops/portal-explorer/run.ts`, see ops/Dockerfile.portal-explorer),
+        # keeping a single source of truth for the entrypoint (task 19.1).
+        env:
+          # The Explorer targets portal-dev (read-only); never production.
+          EXPLORER_BASE_URL: https://portal.today.dev.tooling.dp.iskaypet.com
+          EXPLORER_BEDROCK_BUDGET: "40"
+          EXPLORER_VISIT_TIMEOUT_MS: "30000"
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            cpu: "1"
+            memory: 2Gi

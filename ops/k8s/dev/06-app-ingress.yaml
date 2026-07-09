@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: platformportal-app
+  namespace: platformportal
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - portal.today.dev.tooling.dp.iskaypet.com
+      secretName: platformportal-dev-tls
+  rules:
+    - host: portal.today.dev.tooling.dp.iskaypet.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: platformportal-app
+                port:
+                  number: 3000

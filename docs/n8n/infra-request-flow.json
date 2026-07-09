@@ -1,0 +1,671 @@
+{
+  "name": "Infra Request Handler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "create-infra",
+        "options": {}
+      },
+      "id": "cf4540fb-52ff-41d1-8a96-389d69b0be3f",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -624,
+        -192
+      ],
+      "webhookId": "46fe019b-4922-4115-ba0a-3543c74f33d1"
+    },
+    {
+      "parameters": {
+        "project": {
+          "__rl": true,
+          "value": "10142",
+          "mode": "id"
+        },
+        "issueType": {
+          "__rl": true,
+          "mode": "id",
+          "value": "10048"
+        },
+        "summary": "=[Infra] Solicitud de {{ $json.body.resource_type.toUpperCase() }}: {{ $json.body.bucket_name || $json.body.identifier || $json.body.function_name }}",
+        "additionalFields": {
+          "labels": [
+            "SRE"
+          ],
+          "description": "=Solicitante: {{ $json.body.requestor_email }}\nEquipo: {{ $json.body.team }}\nEntornos: {{ JSON.stringify($json.body.target_environments) }}\nAprobado por: {{ $json.body.approved_by_name || \"N/A\" }} ({{ $json.body.approved_by_email || \"\" }})\n\nDetalles: {{ $json.body.cost_details || \"\" }}\nCoste estimado: {{ $json.body.estimated_cost_monthly > 0 ? \"~$\" + $json.body.estimated_cost_monthly + \"/mes\" : \"Sin coste directo\" }}\n{{ $json.body.cost_specs || \"\" }}"
+        }
+      },
+      "id": "54498237-285b-44fd-b539-0cdbe01b7644",
+      "name": "Jira Create",
+      "type": "n8n-nodes-base.jira",
+      "typeVersion": 1,
+      "position": [
+        -416,
+        -192
+      ],
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "CgputYowbXNdNhol",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "keepOnlySet": true,
+        "values": {
+          "string": [
+            {
+              "name": "team",
+              "value": "={{ $node[\"Webhook\"].json.body.team }}"
+            },
+            {
+              "name": "resource_type",
+              "value": "={{ $node[\"Webhook\"].json.body.resource_type }}"
+            },
+            {
+              "name": "target_environments_json",
+              "value": "={{ JSON.stringify($node[\"Webhook\"].json.body.target_environments) }}"
+            },
+            {
+              "name": "requestor_email",
+              "value": "={{ $node[\"Webhook\"].json.body.requestor_email }}"
+            },
+            {
+              "name": "resource_name",
+              "value": "={{ $node[\"Webhook\"].json.body.bucket_name || $node[\"Webhook\"].json.body.identifier || $node[\"Webhook\"].json.body.function_name || $node[\"Webhook\"].json.body.role_name }}"
+            },
+            {
+              "name": "jira_key",
+              "value": "={{ $json.key }}"
+            },
+            {
+              "name": "jira_id",
+              "value": "={{ $json.id }}"
+            },
+            {
+              "name": "raw_body",
+              "value": "={{ $node[\"Webhook\"].json.body }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fd0704a2-01d4-43cf-8807-d99536f9ff8b",
+      "name": "Set Variables",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -224,
+        -192
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const teamMap = {\n  \"Digital\": { id: 45379727, branch: \"main\" },\n  \"Helios\": { id: 71456629, branch: \"main\" },\n  \"Retail\": { id: 45383610, branch: \"main\" },\n  \"Commerce\": { id: 45379518, branch: \"main\" },\n  \"Clusters\": { id: 45379816, branch: \"main\" },\n  \"Tooling\": { id: 45950137, branch: \"master\" }\n};\n\nconst team = $input.item.json.team;\nconst projectInfo = teamMap[team] || { id: 0, branch: \"main\" };\nconst jiraKey = $input.item.json.jira_key.toLowerCase();\nconst newBranch = `feat/infra-${jiraKey}`;\n\nreturn [{ json: { ...$input.item.json, project_id: projectInfo.id, target_branch: projectInfo.branch, new_branch_name: newBranch } }];"
+      },
+      "id": "60492390-5716-489e-82a5-69ba997a3dbb",
+      "name": "Map Project ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -48,
+        -192
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://gitlab.com/api/v4/projects/{{$json.project_id}}/repository/branches",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "branch",
+              "value": "={{$json.new_branch_name}}"
+            },
+            {
+              "name": "ref",
+              "value": "={{$json.target_branch}}"
+            }
+          ]
+        },
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
+      },
+      "id": "ae4e45bd-17f6-4039-ab95-c1bb34dc5061",
+      "name": "GitLab Create Branch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        96,
+        -192
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "RFNOC6Ek5h3RSZ2O",
+          "name": "Header Auth account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $node[\"Set Variables\"].json.resource_type }}",
+                    "rightValue": "s3",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "s3"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $node[\"Set Variables\"].json.resource_type }}",
+                    "rightValue": "rds",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "rds"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $node[\"Set Variables\"].json.resource_type }}",
+                    "rightValue": "lambda",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "lambda"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $node[\"Set Variables\"].json.resource_type }}",
+                    "rightValue": "iam_role",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "iam_role"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4cc5963c-fed2-4e37-9572-29a91d65d6f6",
+      "name": "Switch Resource",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        272,
+        -224
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const vars = $node[\"Set Variables\"].json;\nconst proj = $node[\"Map Project ID\"].json;\nconst body = vars.raw_body || {};\nconst safeName = (body.bucket_name || '').replace(/[^a-zA-Z0-9-_]/g, '');\nconst envs = JSON.stringify(body.target_environments || []);\n\nconst template = `##-----------S3 Bucket-------##\nresource \"aws_s3_bucket\" \"${safeName}\" {\n  count  = contains(${envs}, var.environment) ? 1 : 0\n  bucket = \"dh-${\"\\\\\" + \"$\"}{var.environment}-${body.bucket_name}\"\n  tags = {\n    Environment = var.environment\n    Purpose     = \"${body.bucket_name}\"\n  }\n}\n\nresource \"aws_s3_bucket_public_access_block\" \"${safeName}\" {\n  count                   = contains(${envs}, var.environment) ? 1 : 0\n  bucket                  = aws_s3_bucket.${safeName}[0].id\n  block_public_acls       = true\n  ignore_public_acls      = true\n  block_public_policy     = true\n  restrict_public_buckets = true\n}\n`;\n\nreturn [{ json: { ...vars, ...proj, tf_content: template, file_path: `iac/storage/${body.bucket_name}.tf` } }];"
+      },
+      "id": "68a5cd26-a523-440f-84a7-5a65da6502ac",
+      "name": "S3 Template",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        -384
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const vars = $node[\"Set Variables\"].json;\nconst proj = $node[\"Map Project ID\"].json;\nconst body = vars.raw_body || {};\nconst safeName = (body.identifier || '').replace(/[^a-zA-Z0-9-_]/g, '');\nconst sgName = safeName.replace(/-/g, '_');\nconst envs = JSON.stringify(body.target_environments || []);\n\nconst template = `##-----------Security Group-------##\nresource \"aws_security_group\" \"db_${sgName}\" {\n  count       = contains(${envs}, var.environment) ? 1 : 0\n  description = \"${body.identifier} RDS Access\"\n  vpc_id      = var.vpc_id\n  ingress {\n    protocol    = \"tcp\"\n    from_port   = 5432\n    to_port     = 5432\n    cidr_blocks = concat(var.eks_vpc_private_subnet_cidrs, var.new_vpn_route, var.oms_general_vpc_private_subnet_cidrs)\n  }\n}\n\n##-----------RDS-------##\nmodule \"${sgName}_rds_postgres\" {\n  source = \"git::https://gitlab.com/iskaypetcom/digital/platform-engineering/aws/terraform-modules/rds-module.git?ref=main\"\n\n  count = contains(${envs}, var.environment) ? 1 : 0\n\n  identifier           = \"${safeName}-rds-postgres\"\n  db_name              = \"${(body.db_name || '').replace(/[^a-zA-Z0-9]/g, '')}\"\n  username             = \"${(body.db_name || '').replace(/[^a-zA-Z0-9]/g, '')}adm\"\n  environment          = var.environment\n  size                 = \"${body.size || 'small'}\"\n\n  vpc_security_group_ids = [aws_security_group.db_${sgName}[0].id]\n  subnet_ids             = var.oms_pvt_subnet\n  db_subnet_group_name   = \"${safeName}-rds\"\n\n  tags = {\n    domain = \"${safeName}\"\n  }\n}\n`;\n\nreturn [{ json: { ...vars, ...proj, tf_content: template, file_path: `iac/databases/${body.identifier}.tf` } }];"
+      },
+      "id": "fbcfc9dc-50d8-4151-9433-ed157c6ba159",
+      "name": "RDS Template",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        -208
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const vars = $node[\"Set Variables\"].json;\nconst proj = $node[\"Map Project ID\"].json;\nconst body = vars.raw_body || {};\nconst safeName = (body.function_name || '').replace(/[^a-zA-Z0-9-_]/g, '');\nconst envs = JSON.stringify(body.target_environments || []);\n\nconst template = `##-----------Lambda Function-------##\nmodule \"lambda_${safeName}\" {\n  source = \"git::https://gitlab.com/iskaypetcom/digital/platform-engineering/aws/terraform-modules/aws-lambda-module.git?ref=main\"\n\n  count = contains(${envs}, var.environment) ? 1 : 0\n\n  function_name = \"${body.function_name}\"\n  source_path   = \"./files/lambda/${body.function_name}\"\n  runtime       = \"${body.runtime || 'python3.12'}\"\n  handler_file  = \"main.py\"\n\n  environment_variables = {\n    ENV = var.environment\n  }\n\n  tags = {\n    domain = \"${safeName}\"\n  }\n}\n`;\n\nreturn [{ json: { ...vars, ...proj, tf_content: template, file_path: `iac/services/${body.function_name}.tf`, create_dummy_file: true } }];"
+      },
+      "id": "24102b5b-91b6-4529-99ff-d0ea6f4fed2f",
+      "name": "Lambda Template",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const vars = $node[\"Set Variables\"].json;\nconst proj = $node[\"Map Project ID\"].json;\nconst body = vars.raw_body || {};\nconst envs = JSON.stringify(body.target_environments || []);\n\nconst template = `module \"iam_role_${(body.role_name || '').replace(/[^a-zA-Z0-9-_]/g, '')}\" {\n  source = \"git::https://gitlab.com/iskaypetcom/digital/platform-engineering/aws/terraform-modules/aws-iam-module.git?ref=main\"\n\n  count = contains(${envs}, var.environment) ? 1 : 0\n\n  role_name      = \"${body.role_name}\"\n  namespace      = \"${body.namespace}\"\n  environment    = var.environment\n\n  enable_s3          = ${body.enable_s3 || false}\n  enable_secrets     = ${body.enable_secrets || false}\n  enable_sqs         = ${body.enable_sqs || false}\n  enable_sns         = ${body.enable_sns || false}\n  enable_eventbridge = ${body.enable_eventbridge || false}\n  enable_rds         = ${body.enable_rds || false}\n\n  tags = {\n    Purpose = \"${body.role_name}\"\n  }\n}`;\n\nreturn [{ json: { ...vars, ...proj, tf_content: template, file_path: `iac/iam_roles/${body.role_name}.tf` } }];"
+      },
+      "id": "e339d5ff-6d44-4d28-a0eb-c83fc2e03b6d",
+      "name": "IAM Template",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://gitlab.com/api/v4/projects/{{$json.project_id}}/repository/files/{{$json.file_path.replace(/\\//g, '%2F')}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "branch",
+              "value": "={{$json.new_branch_name}}"
+            },
+            {
+              "name": "content",
+              "value": "={{$json.tf_content}}"
+            },
+            {
+              "name": "commit_message",
+              "value": "=feat(infra): create {{$json.resource_type}} config (Jira: {{$json.jira_key}})"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3bdc049f-8459-4469-b5cc-e6200640df93",
+      "name": "GitLab Commit",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        736,
+        -192
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "RFNOC6Ek5h3RSZ2O",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://gitlab.com/api/v4/projects/{{$json.project_id}}/repository/files/files%2Flambda%2F{{($json.raw_body.function_name || 'unknown')}}%2Fmain.py",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "branch",
+              "value": "main"
+            },
+            {
+              "name": "content",
+              "value": "def handler(event, context):\n    return 'Hello from Lambda'"
+            },
+            {
+              "name": "commit_message",
+              "value": "=feat(infra): create dummy lambda source (Jira: {{$json.jira_key}})"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "9b7ec857-b37b-4dd8-b077-8a0dd1a5b586",
+      "name": "GitLab Commit Lambda",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        736,
+        16
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "RFNOC6Ek5h3RSZ2O",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://gitlab.com/api/v4/projects/{{$node[\"Map Project ID\"].json.project_id}}/merge_requests",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "source_branch",
+              "value": "={{$node[\"Map Project ID\"].json.new_branch_name}}"
+            },
+            {
+              "name": "target_branch",
+              "value": "={{$node[\"Map Project ID\"].json.target_branch}}"
+            },
+            {
+              "name": "title",
+              "value": "=feat(infra): create {{$node[\"Set Variables\"].json.resource_type}} resource [{{$node[\"Set Variables\"].json.resource_name}}]"
+            },
+            {
+              "name": "description",
+              "value": "=## 🚀 Solicitud de Infraestructura\n\nSe ha solicitado la creación de un nuevo recurso: **{{$node[\"Set Variables\"].json.resource_name}}** ({{$node[\"Set Variables\"].json.resource_type}}).\n\n### 📝 Detalles:\n- **Solicitante:** {{$node[\"Set Variables\"].json.requestor_email}}\n- **Equipo:** {{$node[\"Set Variables\"].json.team}}\n- **Ticket Jira:** {{$node[\"Set Variables\"].json.jira_key}}\n\n### ✅ Cambios:\nEste MR contiene el código Terraform necesario para desplegar el recurso en los entornos seleccionados.\n\n_Generado automáticamente por la automatización de Platform Engineering_"
+            },
+            {
+              "name": "remove_source_branch",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "6b5ccd01-c3d8-41bd-bafe-71c680f4989e",
+      "name": "GitLab Create MR",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        944,
+        -192
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "RFNOC6Ek5h3RSZ2O",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const resource = $node[\"Set Variables\"].json.resource_name;\nconst type = $node[\"Set Variables\"].json.resource_type.toUpperCase();\nconst mrUrl = $input.item.json.web_url;\nconst userName = $node[\"Set Variables\"].json.requestor_email;\nconst ticket = $node[\"Set Variables\"].json.jira_key;\nconst approvedBy = $node[\"Webhook\"].json.body.approved_by_name || 'N/A';\nconst approvedByEmail = $node[\"Webhook\"].json.body.approved_by_email || '';\nconst costSpecs = $node[\"Webhook\"].json.body.cost_specs || '';\nconst costEst = $node[\"Webhook\"].json.body.estimated_cost_monthly;\nconst costLine = costEst > 0 ? '~$' + costEst + '/mes' : 'Sin coste directo';\nconst envs = JSON.stringify($node[\"Webhook\"].json.body.target_environments || []);\n\nconst card = {\n  type: 'message',\n  attachments: [\n    {\n      contentType: 'application/vnd.microsoft.card.adaptive',\n      content: {\n        type: 'AdaptiveCard',\n        version: '1.4',\n        msteams: { width: 'Full' },\n        body: [\n          {\n            type: 'Container',\n            items: [\n              { type: 'TextBlock', text: 'Solicitud de Infraestructura', weight: 'Bolder', size: 'Medium', color: 'Good' },\n              { type: 'TextBlock', text: resource, weight: 'Bolder', size: 'ExtraLarge', spacing: 'None' },\n              {\n                type: 'FactSet',\n                facts: [\n                  { title: 'Tipo:', value: type },\n                  { title: 'Specs:', value: costSpecs || type },\n                  { title: 'Entornos:', value: envs },\n                  { title: 'Coste:', value: costLine },\n                  { title: 'Solicitante:', value: userName },\n                  { title: 'Aprobado por:', value: approvedBy + ' (' + approvedByEmail + ')' },\n                  { title: 'Jira:', value: '[' + ticket + '](https://iskaypet.atlassian.net/browse/' + ticket + ')' }\n                ]\n              }\n            ]\n          }\n        ],\n        actions: [\n          { type: 'Action.OpenUrl', title: 'Ver Merge Request', url: mrUrl },\n          { type: 'Action.OpenUrl', title: 'Ver Ticket en Jira', url: 'https://iskaypet.atlassian.net/browse/' + ticket }\n        ]\n      }\n    }\n  ]\n};\n\nreturn [{ json: { teamsBody: card } }];"
+      },
+      "id": "9cf4de2a-7bf2-4496-8e09-185e70847bfb",
+      "name": "Prepare Teams Card",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1184,
+        -192
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://tiendanimalcom.webhook.office.com/webhookb2/8e93475d-c109-47e0-9493-a63a504e4a7d@19e73cc9-78d1-4540-862c-5a89572ef80e/IncomingWebhook/05bd0c8b06fb4464b0492ae7837f90d0/c9014ec0-0431-4f0a-a4f9-9eaf29abcc81/V2SidVcnWOSxXHg0auYtM_EbxOVyTWHyenGrSwonNRJrs1",
+        "sendHeaders": true,
+        "specifyHeaders": "json",
+        "jsonHeaders": "{\n  \"Content-Type\": \"application/json\"\n}\n",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.teamsBody) }}\n",
+        "options": {}
+      },
+      "id": "d6af50e0-8859-44b9-9fdd-bbe20d2ed10b",
+      "name": "Send Teams Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1184,
+        -416
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Jira Create",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Jira Create": {
+      "main": [
+        [
+          {
+            "node": "Set Variables",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Variables": {
+      "main": [
+        [
+          {
+            "node": "Map Project ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map Project ID": {
+      "main": [
+        [
+          {
+            "node": "GitLab Create Branch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GitLab Create Branch": {
+      "main": [
+        [
+          {
+            "node": "Switch Resource",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch Resource": {
+      "main": [
+        [
+          {
+            "node": "S3 Template",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "RDS Template",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Lambda Template",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IAM Template",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IAM Template": {
+      "main": [
+        [
+          {
+            "node": "GitLab Commit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "S3 Template": {
+      "main": [
+        [
+          {
+            "node": "GitLab Commit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RDS Template": {
+      "main": [
+        [
+          {
+            "node": "GitLab Commit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lambda Template": {
+      "main": [
+        [
+          {
+            "node": "GitLab Commit",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GitLab Commit Lambda",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GitLab Commit": {
+      "main": [
+        [
+          {
+            "node": "GitLab Create MR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GitLab Commit Lambda": {
+      "main": [
+        [
+          {
+            "node": "GitLab Create MR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GitLab Create MR": {
+      "main": [
+        [
+          {
+            "node": "Prepare Teams Card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Teams Card": {
+      "main": [
+        [
+          {
+            "node": "Send Teams Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "99b4bbe1-da3a-497c-96e2-337bf88b4e5d",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "c52849af140fecdfb0c6d81c4296e78a8cded6ecf6ac196569f43a8812b332a0"
+  },
+  "id": "TmxkvnxipQluuRIW",
+  "tags": []
+}

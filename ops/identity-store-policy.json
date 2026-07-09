@@ -1,0 +1,27 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "IdentityStoreReadOnly",
+      "Effect": "Allow",
+      "Action": [
+        "identitystore:DescribeUser",
+        "identitystore:DescribeGroup",
+        "identitystore:DescribeGroupMembership",
+        "identitystore:ListUsers",
+        "identitystore:ListGroups",
+        "identitystore:ListGroupMemberships",
+        "identitystore:ListGroupMembershipsForMember"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "SsoListInstances",
+      "Effect": "Allow",
+      "Action": [
+        "sso:ListInstances"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

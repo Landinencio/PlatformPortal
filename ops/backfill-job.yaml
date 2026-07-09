@@ -1,0 +1,119 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dora-backfill
+  namespace: n8n
+  labels:
+    app.kubernetes.io/instance: n8n-webhooks
+    app.kubernetes.io/name: n8n-webhooks
+  annotations:
+    cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      annotations:
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
+      labels:
+        app: dora-backfill
+    spec:
+      serviceAccountName: n8n-webhooks
+      imagePullSecrets:
+      - name: harbor-registry
+      volumes:
+      - name: scripts
+        configMap:
+          name: dora-backfill-script
+      restartPolicy: Never
+      containers:
+      - name: app
+        image: harbor.tooling.dp.iskaypet.com/tooling/platformportal:fd607563
+        imagePullPolicy: Always
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          node server.js &
+          NODE_PID=$!
+          
+          echo "Starting backfill script..."
+          node /scripts/backfill.js
+          SCRIPT_EXIT_CODE=$?
+          
+          echo "Stopping Next.js server..."
+          kill -SIGTERM $NODE_PID
+          
+          exit $SCRIPT_EXIT_CODE
+        env:
+        - name: AZURE_AD_TENANT_ID
+          value: 19e73cc9-78d1-4540-862c-5a89572ef80e
+        - name: NEXTAUTH_URL
+          value: https://portal.today.tooling.dp.iskaypet.com
+        - name: N8N_WEBHOOK_URL
+          value: http://n8n.n8n.svc.cluster.local/webhook/create-repo
+        - name: N8N_ONBOARDING_WEBHOOK
+          value: http://n8n.n8n.svc.cluster.local/webhook/user-onboarding
+        - name: N8N_FINOPS_WEBHOOK
+          value: http://n8n.n8n.svc.cluster.local/webhook/finops-costs
+        - name: N8N_FINOPS_ATHENA_WEBHOOK
+          value: http://n8n.n8n.svc.cluster.local/webhook/finops-athena
+        - name: GRAFANA_STACK_URL
+          value: https://iskaylog.grafana.net
+        - name: GRAFANA_TOKEN
+          value: glsa_REDACTED_ROTATE_ME
+        - name: GRAFANA_COOKIE
+          value: ""
+        - name: AZURE_AD_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              key: AZURE_AD_CLIENT_ID
+              name: n8n-webhooks-env
+        - name: AZURE_AD_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: AZURE_AD_CLIENT_SECRET
+              name: n8n-webhooks-env
+        - name: NEXTAUTH_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: NEXTAUTH_SECRET
+              name: n8n-webhooks-env
+        - name: GITLAB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: gitlab-token
+              name: platformportal-secrets
+        - name: SONARQUBE_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: sonarqube-token
+              name: platformportal-secrets
+        - name: SONARQUBE_URL
+          value: http://sonarqube-sonarqube.sonarqube.svc.cluster.local:9000/api
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              key: database-url
+              name: platformportal-secrets
+        - name: GITLAB_URL
+          value: https://gitlab.com
+        - name: AWS_BEDROCK_REGION
+          value: eu-west-1
+        - name: AWS_BEDROCK_ROLE_ARN
+          value: arn:aws:iam::100300500700:role/portal-bedrock-access
+        - name: AWS_BEDROCK_MODEL_ID
+          value: eu.amazon.nova-lite-v1:0
+        envFrom:
+        - configMapRef:
+            name: platformportal-config
+        - secretRef:
+            name: platformportal-secrets
+        volumeMounts:
+        - name: scripts
+          mountPath: /scripts
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 1024Mi
+          requests:
+            cpu: 250m
+            memory: 512Mi

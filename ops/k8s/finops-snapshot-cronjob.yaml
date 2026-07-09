@@ -1,0 +1,38 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: finops-daily-snapshot
+  namespace: n8n
+spec:
+  schedule: "0 19 * * *"  # 19:00 UTC = 21:00 Madrid (1h after metrics snapshot)
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 600  # 10 min max
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+          - name: finops-snapshot
+            image: curlimages/curl:latest
+            command:
+            - sh
+            - -c
+            - |
+              echo "Starting FinOps daily snapshot..."
+              echo "Date: $(date)"
+              curl -sf --max-time 300 \
+                -X POST \
+                -H "x-internal-secret: $(INTERNAL_API_SECRET)" \
+                "http://n8n-webhooks.n8n.svc.cluster.local:3000/api/finops/snapshot"
+              echo ""
+              echo "Done at: $(date)"
+            env:
+            - name: INTERNAL_API_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: platformportal-secrets
+                  key: INTERNAL_API_SECRET

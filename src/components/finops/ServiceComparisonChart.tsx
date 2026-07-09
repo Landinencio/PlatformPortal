@@ -1,40 +1,39 @@
 "use client";
 
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { AccountSummary } from "@/types/finops";
+import { formatAwsServiceName, truncateLabel } from "@/lib/finops-format";
+import { useI18n } from "@/lib/i18n";
 
 interface ServiceComparisonChartProps {
     accounts: AccountSummary[];
+    serviceRows?: { name: string; cost: number; fullName: string }[];
     viewMode: 'service' | 'account';
 }
 
-export function ServiceComparisonChart({ accounts, viewMode }: ServiceComparisonChartProps) {
-
-    const formatServiceName = (name: string) => {
-        return name
-            .replace("Amazon Elastic Compute Cloud - Compute", "EC2 - Compute")
-            .replace("Amazon Elastic Compute Cloud", "EC2")
-            .replace("Amazon Elastic Container Service for Kubernetes", "EKS")
-            .replace("Amazon Simple Storage Service", "S3")
-            .replace("Amazon Relational Database Service", "RDS")
-            .replace("Amazon Virtual Private Cloud", "VPC")
-            .replace("Amazon Elastic Load Balancing", "ELB")
-            .replace("Amazon CloudWatch", "CloudWatch")
-            .replace(/^Amazon /, "");
-    };
-
+export function ServiceComparisonChart({ accounts, serviceRows, viewMode }: ServiceComparisonChartProps) {
+    const { t } = useI18n();
     const prepareData = () => {
         if (viewMode === 'account') {
             return accounts
                 .slice(0, 10)
                 .map(acc => ({
-                    name: acc.accountName.length > 20 ? acc.accountName.substring(0, 20) + '...' : acc.accountName,
+                    name: truncateLabel(acc.accountName, 24),
                     cost: parseFloat(acc.totalCost.toFixed(2)),
                     fullName: acc.accountName
                 }));
         } else {
-            // Aggregate by service across all accounts
+            if (serviceRows && serviceRows.length > 0) {
+                return serviceRows
+                    .slice(0, 10)
+                    .map((row) => ({
+                        name: truncateLabel(row.fullName, 24),
+                        cost: parseFloat(row.cost.toFixed(2)),
+                        fullName: row.fullName,
+                    }));
+            }
+
             const serviceMap: { [key: string]: number } = {};
             accounts.forEach(acc => {
                 acc.services.forEach(svc => {
@@ -49,11 +48,9 @@ export function ServiceComparisonChart({ accounts, viewMode }: ServiceComparison
                 .sort((a, b) => b[1] - a[1])
                 .slice(0, 10)
                 .map(([name, cost]) => ({
-                    name: formatServiceName(name).length > 20
-                        ? formatServiceName(name).substring(0, 20) + '...'
-                        : formatServiceName(name),
+                    name: truncateLabel(formatAwsServiceName(name), 24),
                     cost: parseFloat(cost.toFixed(2)),
-                    fullName: formatServiceName(name)
+                    fullName: formatAwsServiceName(name)
                 }));
         }
     };
@@ -74,39 +71,47 @@ export function ServiceComparisonChart({ accounts, viewMode }: ServiceComparison
         return null;
     };
 
+    const title = viewMode === 'service' ? t("costs.top10services") : t("costs.top10accounts");
+    const description = viewMode === 'service'
+        ? t("costs.top10servicesDesc")
+        : t("costs.top10accountsDesc");
+
     return (
         <Card className="border-none shadow-lg">
             <CardHeader>
-                <CardTitle>Top 10 {viewMode === 'service' ? 'Services' : 'Accounts'} by Cost</CardTitle>
-                <CardDescription>
-                    Comparative analysis of highest spenders
-                </CardDescription>
+                <CardTitle>{title}</CardTitle>
+                <CardDescription>{description}</CardDescription>
             </CardHeader>
             <CardContent>
+                {data.length === 0 ? (
+                    <div className="flex h-[400px] items-center justify-center text-sm text-muted-foreground">
+                        {t("costs.noDataInScope")}
+                    </div>
+                ) : (
                 <ResponsiveContainer width="100%" height={400}>
-                    <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+                    <BarChart data={data} layout="vertical" margin={{ top: 10, right: 24, left: 12, bottom: 10 }}>
                         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                         <XAxis
-                            dataKey="name"
-                            angle={-45}
-                            textAnchor="end"
-                            height={100}
+                            type="number"
+                            tickFormatter={(value) => `$${Number(value).toLocaleString()}`}
                             className="text-xs"
                         />
                         <YAxis
-                            tickFormatter={(value) => `$${value.toLocaleString()}`}
+                            type="category"
+                            dataKey="name"
+                            width={180}
                             className="text-xs"
                         />
                         <Tooltip content={<CustomTooltip />} />
-                        <Legend />
                         <Bar
                             dataKey="cost"
                             fill="hsl(var(--primary))"
-                            radius={[8, 8, 0, 0]}
+                            radius={[0, 8, 8, 0]}
                             name="Cost ($)"
                         />
                     </BarChart>
                 </ResponsiveContainer>
+                )}
             </CardContent>
         </Card>
     );

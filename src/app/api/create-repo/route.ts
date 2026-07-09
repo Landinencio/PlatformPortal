@@ -1,6 +1,9 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { NextResponse } from "next/server";
+import { getSessionRole } from "@/lib/session-role";
+import { trackUserActivity } from "@/lib/user-activity";
+import { buildGitLabRepositoryCompliancePayload } from "@/lib/gitlab-governance";
 
 export async function POST(req: Request) {
     const session = await getServerSession(authOptions);
@@ -10,12 +13,14 @@ export async function POST(req: Request) {
     }
 
     try {
+        const role = getSessionRole(session);
         const body = await req.json();
-        const { name, description, namespace_id, template } = body;
+        const { name, description, namespace_id, template, businessTeam } = body;
+        const gitlabCompliance = buildGitLabRepositoryCompliancePayload();
 
         // Validate input (basic)
-        if (!name || !namespace_id || !template) {
-            return NextResponse.json({ error: "Missing required fields (name, namespace_id, template)" }, { status: 400 });
+        if (!name || !namespace_id || !template || !businessTeam) {
+            return NextResponse.json({ error: "Missing required fields (name, namespace_id, template, businessTeam)" }, { status: 400 });
         }
 
         const n8nUrl = process.env.N8N_WEBHOOK_URL;
@@ -37,6 +42,8 @@ export async function POST(req: Request) {
                 description,
                 namespace_id,
                 template,
+                businessTeam,
+                gitlabCompliance,
                 timestamp: new Date().toISOString(),
             }),
         });
@@ -45,6 +52,29 @@ export async function POST(req: Request) {
             const text = await response.text();
             console.error("n8n error:", text);
             return NextResponse.json({ error: "Failed to trigger automation" }, { status: 502 });
+        }
+
+        try {
+            await trackUserActivity({
+                eventType: "api_action",
+                userEmail: session.user?.email || "unknown@unknown.local",
+                userName: session.user?.name || null,
+                userRole: role,
+                authSub: session.user?.oid || null,
+                path: "/api/create-repo",
+                action: "create_repo_request",
+                metadata: {
+                    repository: name,
+                    namespaceId: namespace_id,
+                    template,
+                    businessTeam,
+                    branchNamingAdr: gitlabCompliance.adrId,
+                    branchNameRegex: gitlabCompliance.branchNaming.regex,
+                    deployStage: gitlabCompliance.dora.productionDeployStage,
+                },
+            });
+        } catch (trackError) {
+            console.error("Failed to track create-repo activity:", trackError);
         }
 
         const data = await response.json();

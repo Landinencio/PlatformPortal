@@ -1,0 +1,55 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: infra-reminder
+  namespace: n8n
+spec:
+  schedule: "0 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: infra-reminder
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: reminder
+            image: curlimages/curl:latest
+            imagePullPolicy: Always
+            env:
+            - name: INTERNAL_API_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: platformportal-secrets
+                  key: INTERNAL_API_SECRET
+            command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Starting infra reminder check..."
+              echo "Date: $(date)"
+
+              STATUS=$(curl -X POST \
+                -H "Content-Type: application/json" \
+                -H "x-internal-secret: ${INTERNAL_API_SECRET}" \
+                -w "%{http_code}" \
+                -s -o /tmp/response.json \
+                --max-time 30 \
+                http://n8n-webhooks.n8n.svc.cluster.local:3000/api/infra-requests/reminders)
+
+              echo ""
+              echo "HTTP Status: $STATUS"
+              echo "Response:"
+              cat /tmp/response.json
+              echo ""
+
+              if [ "$STATUS" != "200" ]; then
+                echo "ERROR: Reminder check failed with status $STATUS"
+                exit 1
+              fi
+
+              echo "Reminder check completed successfully!"

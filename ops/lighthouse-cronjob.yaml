@@ -1,0 +1,214 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: lighthouse-animalis
+  namespace: n8n
+spec:
+  schedule: "0 3 */2 * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 10800
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app: lighthouse-scan
+        spec:
+          restartPolicy: Never
+          imagePullSecrets:
+            - name: harbor-registry
+          containers:
+            - name: lighthouse
+              image: harbor.tooling.dp.iskaypet.com/tooling/lighthouse-scanner:latest
+              imagePullPolicy: Always
+              resources:
+                requests:
+                  cpu: "1"
+                  memory: "2Gi"
+                limits:
+                  cpu: "2"
+                  memory: "4Gi"
+              env:
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: platformportal-secrets
+                      key: database-url
+                - name: MONITOR_ID
+                  value: "1"
+              command: ["node", "/app/lighthouse-scan.js"]
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: lighthouse-kiwoko-es
+  namespace: n8n
+spec:
+  schedule: "0 3 */2 * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 10800
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app: lighthouse-scan
+        spec:
+          restartPolicy: Never
+          imagePullSecrets:
+            - name: harbor-registry
+          containers:
+            - name: lighthouse
+              image: harbor.tooling.dp.iskaypet.com/tooling/lighthouse-scanner:latest
+              imagePullPolicy: Always
+              resources:
+                requests:
+                  cpu: "1"
+                  memory: "2Gi"
+                limits:
+                  cpu: "2"
+                  memory: "4Gi"
+              env:
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: platformportal-secrets
+                      key: database-url
+                - name: MONITOR_ID
+                  value: "2"
+              command: ["node", "/app/lighthouse-scan.js"]
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: lighthouse-kiwoko-pt
+  namespace: n8n
+spec:
+  schedule: "0 3 */2 * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 10800
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app: lighthouse-scan
+        spec:
+          restartPolicy: Never
+          imagePullSecrets:
+            - name: harbor-registry
+          containers:
+            - name: lighthouse
+              image: harbor.tooling.dp.iskaypet.com/tooling/lighthouse-scanner:latest
+              imagePullPolicy: Always
+              resources:
+                requests:
+                  cpu: "1"
+                  memory: "2Gi"
+                limits:
+                  cpu: "2"
+                  memory: "4Gi"
+              env:
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: platformportal-secrets
+                      key: database-url
+                - name: MONITOR_ID
+                  value: "3"
+              command: ["node", "/app/lighthouse-scan.js"]
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: lighthouse-tiendanimal-es
+  namespace: n8n
+spec:
+  schedule: "0 3 */2 * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 10800
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app: lighthouse-scan
+        spec:
+          restartPolicy: Never
+          imagePullSecrets:
+            - name: harbor-registry
+          containers:
+            - name: lighthouse
+              image: harbor.tooling.dp.iskaypet.com/tooling/lighthouse-scanner:latest
+              imagePullPolicy: Always
+              resources:
+                requests:
+                  cpu: "1"
+                  memory: "2Gi"
+                limits:
+                  cpu: "2"
+                  memory: "4Gi"
+              env:
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: platformportal-secrets
+                      key: database-url
+                - name: MONITOR_ID
+                  value: "4"
+              command: ["node", "/app/lighthouse-scan.js"]
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: lighthouse-tiendanimal-pt
+  namespace: n8n
+spec:
+  schedule: "0 3 */2 * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 10800
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app: lighthouse-scan
+        spec:
+          restartPolicy: Never
+          imagePullSecrets:
+            - name: harbor-registry
+          containers:
+            - name: lighthouse
+              image: harbor.tooling.dp.iskaypet.com/tooling/lighthouse-scanner:latest
+              imagePullPolicy: Always
+              resources:
+                requests:
+                  cpu: "1"
+                  memory: "2Gi"
+                limits:
+                  cpu: "2"
+                  memory: "4Gi"
+              env:
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: platformportal-secrets
+                      key: database-url
+                - name: MONITOR_ID
+                  value: "5"
+              command: ["node", "/app/lighthouse-scan.js"]
